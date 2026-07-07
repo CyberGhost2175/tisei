@@ -1,0 +1,514 @@
+// TiSei CRM — Prisma schema
+// Refrigeration / climate / heating equipment repair company.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Enums
+// ─────────────────────────────────────────────────────────────
+
+enum UserRole {
+  manager
+  executor
+  admin
+}
+
+enum RequestSource {
+  site
+  manual
+}
+
+enum ClientType {
+  serviced
+  new_from_site
+}
+
+enum RequestStatus {
+  new
+  in_progress
+  awaiting_parts
+  frozen
+  in_service
+  closed
+  cancelled
+}
+
+enum RequestPriority {
+  critical
+  high
+  normal
+  low
+}
+
+enum CommentType {
+  comment
+  system_event
+}
+
+enum NotificationChannel {
+  email
+  push
+}
+
+enum ThemeMode {
+  light
+  dark
+  system
+}
+
+enum ServiceEquipmentStatus {
+  in_service
+  returned
+}
+
+// ─────────────────────────────────────────────────────────────
+// Users & auth
+// ─────────────────────────────────────────────────────────────
+
+model User {
+  id             String    @id @default(cuid())
+  fullName       String
+  email          String    @unique
+  phone          String?
+  passwordHash   String
+  role           UserRole
+  specialization String[]  @default([])
+  avatarUrl      String?
+  is2faEnabled   Boolean   @default(false)
+  totpSecret     String?
+  isActive       Boolean   @default(true)
+  lastLoginAt    DateTime?
+  createdAt      DateTime  @default(now())
+  updatedAt      DateTime  @updatedAt
+
+  loginLogs               LoginLog[]
+  assignedRequests        RequestAssignment[]
+  authoredComments        Comment[]
+  uploadedAttachments     Attachment[]
+  closingForms            ClosingForm[]
+  notifications           Notification[]
+  notificationPreferences NotificationPreference[]
+  pushSubscriptions       PushSubscription[]
+  auditLogs               AuditLog[]
+  passwordResetTokens     PasswordResetToken[]
+  refreshTokens           RefreshToken[]
+  settings                UserSettings?
+
+  @@index([role])
+  @@index([isActive])
+  @@map("users")
+}
+
+model UserSettings {
+  userId    String    @id
+  theme     ThemeMode @default(light)
+  updatedAt DateTime  @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_settings")
+}
+
+model LoginLog {
+  id        String   @id @default(cuid())
+  userId    String
+  ip        String?
+  userAgent String?
+  success   Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([createdAt])
+  @@map("login_logs")
+}
+
+model RefreshToken {
+  id             String    @id @default(cuid())
+  userId         String
+  tokenHash      String    @unique
+  userAgent      String?
+  ip             String?
+  expiresAt      DateTime
+  lastUsedAt     DateTime  @default(now())
+  revokedAt      DateTime?
+  createdAt      DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("refresh_tokens")
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  userId    String
+  tokenHash String    @unique
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("password_reset_tokens")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Clients & dictionaries
+// ─────────────────────────────────────────────────────────────
+
+model Client {
+  id         String   @id @default(cuid())
+  name       String
+  phone      String?
+  email      String?
+  address    String?
+  isServiced Boolean  @default(false)
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  requests Request[]
+
+  @@index([phone])
+  @@index([isServiced])
+  @@map("clients")
+}
+
+model EquipmentCategory {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+
+  requests Request[]
+  serviceEquipment ServiceEquipment[]
+
+  @@map("equipment_categories")
+}
+
+model MalfunctionType {
+  id        String    @id @default(cuid())
+  name      String    @unique
+  isActive  Boolean   @default(true)
+  createdAt DateTime  @default(now())
+
+  requests Request[]
+
+  @@map("malfunction_types")
+}
+
+// Freeze reasons dictionary (causes for putting a request on hold)
+model FreezeReason {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+
+  @@map("freeze_reasons")
+}
+
+// Partner restaurant chains — requests get critical priority
+model PartnerEstablishment {
+  id        String   @id @default(cuid())
+  name      String   @unique
+  aliases   String[] @default([])
+  isBuiltin Boolean  @default(false)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  requests Request[]
+
+  serviceEquipment ServiceEquipment[]
+
+  @@map("partner_establishments")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Request number sequence (atomic per-month counter)
+// ─────────────────────────────────────────────────────────────
+
+model RequestSequence {
+  // period key "YYYYMM"
+  period    String   @id
+  lastValue Int      @default(0)
+  updatedAt DateTime @updatedAt
+
+  @@map("request_sequences")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Requests
+// ─────────────────────────────────────────────────────────────
+
+model Request {
+  id     String @id @default(cuid())
+  number String @unique // TiSei-YYYYMM-XXXX
+
+  source     RequestSource   @default(manual)
+  clientType ClientType      @default(new_from_site)
+  status     RequestStatus   @default(new)
+  priority   RequestPriority @default(normal)
+
+  clientId String?
+  client   Client? @relation(fields: [clientId], references: [id], onDelete: SetNull)
+
+  partnerEstablishmentId String?
+  partnerEstablishment   PartnerEstablishment? @relation(fields: [partnerEstablishmentId], references: [id], onDelete: SetNull)
+
+  companyOrFullName String
+  phone             String
+  email             String?
+
+  address   String?
+  latitude  Float?
+  longitude Float?
+  geocodedAt DateTime?
+
+  equipmentCategoryId String?
+  equipmentCategory   EquipmentCategory? @relation(fields: [equipmentCategoryId], references: [id], onDelete: SetNull)
+  equipmentCategoryText String?
+  equipmentName       String?
+
+  problemDescription    String?
+  malfunctionTypeId     String?
+  malfunctionType       MalfunctionType? @relation(fields: [malfunctionTypeId], references: [id], onDelete: SetNull)
+  malfunctionCustomText String?
+
+  deadline DateTime?
+
+  // Synced with the income sum of the closing form
+  laborCost Decimal? @db.Decimal(14, 2)
+  usedParts String?
+
+  frozenAt     DateTime?
+  frozenReason String?
+
+  closedAt  DateTime?
+  deletedAt DateTime?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  assignments RequestAssignment[]
+  closingForm ClosingForm?
+  comments    Comment[]
+  attachments Attachment[]
+  serviceEquipment ServiceEquipment?
+
+  @@index([number])
+  @@index([status])
+  @@index([priority])
+  @@index([clientType])
+  @@index([partnerEstablishmentId])
+  @@index([deadline])
+  @@index([createdAt])
+  @@index([deletedAt])
+  @@index([status, deadline])
+  @@map("requests")
+}
+
+// many-to-many Request <-> executor User
+model RequestAssignment {
+  id         String   @id @default(cuid())
+  requestId  String
+  executorId String
+  assignedAt DateTime @default(now())
+
+  request  Request @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  executor User    @relation(fields: [executorId], references: [id], onDelete: Cascade)
+
+  @@unique([requestId, executorId])
+  @@index([executorId])
+  @@index([requestId])
+  @@map("request_assignments")
+}
+
+// Оборудование, находящееся в сервисе (на ремонте у TiSei)
+model ServiceEquipment {
+  id     String @id @default(cuid())
+
+  companyOrFullName String
+  partnerEstablishmentId String?
+  partnerEstablishment   PartnerEstablishment? @relation(fields: [partnerEstablishmentId], references: [id], onDelete: SetNull)
+
+  equipmentCategoryId String?
+  equipmentCategory   EquipmentCategory? @relation(fields: [equipmentCategoryId], references: [id], onDelete: SetNull)
+  equipmentCategoryText String?
+  equipmentName       String?
+  problemDescription  String?
+
+  requestId String? @unique
+  request   Request? @relation(fields: [requestId], references: [id], onDelete: SetNull)
+
+  status     ServiceEquipmentStatus @default(in_service)
+  receivedAt DateTime               @default(now())
+  returnedAt DateTime?
+  notes      String?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([status])
+  @@index([companyOrFullName])
+  @@index([partnerEstablishmentId])
+  @@map("service_equipment")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Closing form (financials)
+// ─────────────────────────────────────────────────────────────
+
+model ClosingForm {
+  id        String @id @default(cuid())
+  requestId String @unique
+
+  executorId   String?
+  executorName String? // snapshot at fill time
+
+  requestNumberSnapshot String?
+  addressSnapshot       String?
+
+  workPerformed String?
+
+  incomeAmount  Decimal @default(0) @db.Decimal(14, 2)
+  expenseAmount Decimal @default(0) @db.Decimal(14, 2)
+
+  // Always recomputed on the server — never trusted from the client.
+  profit           Decimal @default(0) @db.Decimal(14, 2)
+  companyCommission Decimal @default(0) @db.Decimal(14, 2)
+  executorPayout   Decimal @default(0) @db.Decimal(14, 2)
+
+  isLocked    Boolean   @default(false)
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  confirmedAt DateTime?
+
+  request  Request @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  executor User?   @relation(fields: [executorId], references: [id], onDelete: SetNull)
+
+  @@index([executorId])
+  @@map("closing_forms")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Comments / history feed
+// ─────────────────────────────────────────────────────────────
+
+model Comment {
+  id        String      @id @default(cuid())
+  requestId String
+  authorId  String?
+  type      CommentType @default(comment)
+  text      String
+  createdAt DateTime    @default(now())
+
+  request Request @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  author  User?   @relation(fields: [authorId], references: [id], onDelete: SetNull)
+
+  @@index([requestId])
+  @@index([createdAt])
+  @@map("comments")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Attachments (metadata only; files live in S3)
+// ─────────────────────────────────────────────────────────────
+
+model Attachment {
+  id           String   @id @default(cuid())
+  requestId    String
+  uploadedById String?
+  url          String
+  fileName     String?
+  fileType     String?
+  sizeBytes    Int?
+  createdAt    DateTime @default(now())
+
+  request    Request @relation(fields: [requestId], references: [id], onDelete: Cascade)
+  uploadedBy User?   @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  @@index([requestId])
+  @@map("attachments")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Notifications
+// ─────────────────────────────────────────────────────────────
+
+model Notification {
+  id      String              @id @default(cuid())
+  userId  String
+  event   String
+  payload Json?
+  channel NotificationChannel
+  isRead  Boolean             @default(false)
+  sentAt  DateTime?
+  createdAt DateTime          @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([isRead])
+  @@map("notifications")
+}
+
+model NotificationPreference {
+  id        String   @id @default(cuid())
+  userId    String
+  eventType String
+  isEnabled Boolean  @default(true)
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, eventType])
+  @@index([userId])
+  @@map("notification_preferences")
+}
+
+model PushSubscription {
+  id        String   @id @default(cuid())
+  userId    String
+  endpoint  String   @unique
+  p256dh    String
+  auth      String
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("push_subscriptions")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Audit log
+// ─────────────────────────────────────────────────────────────
+
+model AuditLog {
+  id         String   @id @default(cuid())
+  userId     String?
+  action     String
+  entityType String
+  entityId   String
+  before     Json?
+  after      Json?
+  createdAt  DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([entityType, entityId])
+  @@index([createdAt])
+  @@map("audit_logs")
+}

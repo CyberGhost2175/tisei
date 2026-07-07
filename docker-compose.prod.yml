@@ -1,0 +1,121 @@
+name: tisei-prod
+
+x-logging: &default-logging
+  driver: json-file
+  options:
+    max-size: "20m"
+    max-file: "5"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: tisei-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - tisei_pgdata:/var/lib/postgresql/data
+    networks:
+      - tisei
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U \"$$POSTGRES_USER\" -d \"$$POSTGRES_DB\""]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+
+  backend:
+    build:
+      context: ./tisei_back
+      dockerfile: Dockerfile
+    container_name: tisei-backend
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 30s
+    env_file:
+      - .env
+    environment:
+      NODE_ENV: production
+      DATABASE_URL: postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB}?schema=public
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    expose:
+      - "4000"
+    networks:
+      - tisei
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:4000/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 60s
+
+  crm:
+    build:
+      context: ./tisei_front_crm
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+        NEXT_PUBLIC_YANDEX_MAPS_API_KEY: ${NEXT_PUBLIC_YANDEX_MAPS_API_KEY:-}
+    container_name: tisei-crm
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3000
+      HOSTNAME: 0.0.0.0
+    depends_on:
+      backend:
+        condition: service_healthy
+    expose:
+      - "3000"
+    networks:
+      - tisei
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:3000/login || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+  landing:
+    build:
+      context: ./tisei_front_lending
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL}
+    container_name: tisei-landing
+    restart: unless-stopped
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      HOSTNAME: 0.0.0.0
+      BACKEND_INTERNAL_URL: http://backend:4000/api/v1
+    depends_on:
+      backend:
+        condition: service_healthy
+    expose:
+      - "3001"
+    networks:
+      - tisei
+    logging: *default-logging
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:3001/ || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 40s
+
+networks:
+  tisei:
+    name: tisei_prod
+
+volumes:
+  tisei_pgdata:

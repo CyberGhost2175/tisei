@@ -1,0 +1,35 @@
+# Secrets & local env
+.env
+.env.local
+.env.*.local
+.env.test
+!.env.example
+
+# Dependencies & build artifacts
+node_modules/
+dist/
+.next/
+out/
+build/
+coverage/
+*.tsbuildinfo
+
+# Logs & OS
+*.log
+npm-debug.log*
+.DS_Store
+
+# IDE
+.idea/
+.vscode/
+
+# Local DB / backups
+*.db
+backups/
+
+# Prisma local
+prisma/*.db
+
+# Misc
+.vercel
+*.pem

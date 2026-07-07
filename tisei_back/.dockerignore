@@ -1,0 +1,16 @@
+node_modules
+dist
+.git
+.gitignore
+.env
+.env.*
+!.env.example
+*.md
+coverage
+tests
+.vscode
+.idea
+backups
+npm-debug.log*
+Dockerfile
+docker-compose.yml

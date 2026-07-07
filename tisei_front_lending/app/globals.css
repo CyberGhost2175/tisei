@@ -1,0 +1,184 @@
+@import "tailwindcss";
+
+/* ============================================================
+   TiSei Landing — design tokens ported 1:1 from Stitch
+   (Material Design 3 palette, Manrope + Inter, custom spacing)
+   ============================================================ */
+@theme {
+  /* Colors */
+  --color-on-background: #191c1f;
+  --color-secondary-fixed-dim: #b0c6ff;
+  --color-surface: #f7f9fd;
+  --color-on-surface-variant: #45474e;
+  --color-secondary: #0055c7;
+  --color-outline: #75777e;
+  --color-on-tertiary-fixed: #001f2a;
+  --color-on-tertiary: #ffffff;
+  --color-background: #f7f9fd;
+  --color-inverse-on-surface: #eff1f5;
+  --color-on-primary-container: #7887ab;
+  --color-tertiary-container: #002330;
+  --color-secondary-fixed: #d9e2ff;
+  --color-on-error: #ffffff;
+  --color-inverse-surface: #2d3134;
+  --color-on-secondary-fixed: #001945;
+  --color-on-tertiary-container: #0092bd;
+  --color-on-surface: #191c1f;
+  --color-inverse-primary: #b7c6ed;
+  --color-on-primary: #ffffff;
+  --color-on-primary-fixed: #0a1b39;
+  --color-on-error-container: #93000a;
+  --color-surface-bright: #f7f9fd;
+  --color-outline-variant: #c5c6ce;
+  --color-on-secondary-fixed-variant: #00419c;
+  --color-tertiary: #00090f;
+  --color-error: #ba1a1a;
+  --color-primary: #00071b;
+  --color-error-container: #ffdad6;
+  --color-tertiary-fixed-dim: #6dd2ff;
+  --color-on-tertiary-fixed-variant: #004d65;
+  --color-tertiary-fixed: #bfe9ff;
+  --color-on-secondary-container: #fefcff;
+  --color-surface-tint: #505e80;
+  --color-surface-container-highest: #e0e3e6;
+  --color-primary-container: #0f1f3d;
+  --color-surface-container-high: #e6e8ec;
+  --color-surface-container-low: #f2f4f8;
+  --color-surface-dim: #d8dade;
+  --color-primary-fixed-dim: #b7c6ed;
+  --color-secondary-container: #196df2;
+  --color-surface-container: #eceef2;
+  --color-surface-container-lowest: #ffffff;
+  --color-surface-variant: #e0e3e6;
+  --color-on-secondary: #ffffff;
+  --color-primary-fixed: #d8e2ff;
+  --color-on-primary-fixed-variant: #384667;
+
+  /* Spacing */
+  --spacing-gutter: 24px;
+  --spacing-base: 8px;
+  --spacing-xs: 4px;
+  --spacing-sm: 12px;
+  --spacing-md: 24px;
+  --spacing-lg: 48px;
+  --spacing-xl: 80px;
+
+  /* Max width */
+  --container-container-max: 1280px;
+
+  /* Font families */
+  --font-display-lg: var(--font-manrope), sans-serif;
+  --font-headline-lg: var(--font-manrope), sans-serif;
+  --font-headline-md: var(--font-manrope), sans-serif;
+  --font-headline-lg-mobile: var(--font-manrope), sans-serif;
+  --font-body-lg: var(--font-inter), sans-serif;
+  --font-body-md: var(--font-inter), sans-serif;
+  --font-label-md: var(--font-inter), sans-serif;
+  --font-mono-data: var(--font-inter), sans-serif;
+
+  /* Font sizes (size / line-height / weight / tracking) */
+  --text-display-lg: 48px;
+  --text-display-lg--line-height: 56px;
+  --text-display-lg--letter-spacing: -0.02em;
+  --text-display-lg--font-weight: 800;
+  --text-headline-lg: 32px;
+  --text-headline-lg--line-height: 40px;
+  --text-headline-lg--letter-spacing: -0.01em;
+  --text-headline-lg--font-weight: 700;
+  --text-headline-lg-mobile: 28px;
+  --text-headline-lg-mobile--line-height: 36px;
+  --text-headline-lg-mobile--font-weight: 700;
+  --text-headline-md: 24px;
+  --text-headline-md--line-height: 32px;
+  --text-headline-md--font-weight: 600;
+  --text-body-lg: 18px;
+  --text-body-lg--line-height: 28px;
+  --text-body-lg--font-weight: 400;
+  --text-body-md: 16px;
+  --text-body-md--line-height: 24px;
+  --text-body-md--font-weight: 400;
+  --text-label-md: 14px;
+  --text-label-md--line-height: 20px;
+  --text-label-md--letter-spacing: 0.05em;
+  --text-label-md--font-weight: 600;
+  --text-mono-data: 13px;
+  --text-mono-data--line-height: 18px;
+  --text-mono-data--font-weight: 500;
+}
+
+/* Material Symbols icon font */
+.material-symbols-outlined {
+  font-family: "Material Symbols Outlined";
+  font-weight: normal;
+  font-style: normal;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  -webkit-font-feature-settings: "liga";
+  -webkit-font-smoothing: antialiased;
+  font-variation-settings: "FILL" 0, "wght" 400, "GRAD" 0, "opsz" 24;
+}
+
+/* Landing decorative helpers (from Stitch) */
+.industrial-grid {
+  background-image: radial-gradient(
+    circle,
+    rgba(27, 110, 243, 0.1) 1px,
+    transparent 1px
+  );
+  background-size: 40px 40px;
+}
+.step-line-animate {
+  background-size: 200% 100%;
+  animation: move-line 3s linear infinite;
+}
+@keyframes move-line {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: 0% 0;
+  }
+}
+
+/* Mobile menu animations */
+@keyframes menu-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@keyframes menu-panel-in {
+  from { opacity: 0; transform: translateY(-16px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+@keyframes menu-item-in {
+  from { opacity: 0; transform: translateX(-14px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+.animate-menu-fade {
+  animation: menu-fade 0.25s ease forwards;
+}
+.animate-menu-panel {
+  transform-origin: top;
+  animation: menu-panel-in 0.32s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+.animate-menu-item {
+  opacity: 0;
+  animation: menu-item-in 0.35s cubic-bezier(0.22, 1, 0.36, 1) forwards;
+}
+
+/* Scroll reveal (progressive enhancement) */
+.reveal-init {
+  opacity: 0;
+  transform: translateY(2.5rem);
+  transition:
+    opacity 0.7s ease,
+    transform 0.7s ease;
+}
+.reveal-show {
+  opacity: 1;
+  transform: translateY(0);
+}
