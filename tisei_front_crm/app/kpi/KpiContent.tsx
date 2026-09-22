@@ -35,7 +35,7 @@ export function KpiContent() {
   const [error, setError] = useState("");
 
   useEffect(() => {
-    if (user?.role === "executor") router.replace("/");
+    if (user?.role === "executor" || user?.role === "master") router.replace("/");
   }, [user, router]);
 
   const load = useCallback(

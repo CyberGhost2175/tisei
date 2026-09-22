@@ -44,7 +44,7 @@ export default function MasterCabinetPage() {
       <header className="sticky top-0 z-30 bg-surface border-b border-outline-variant px-4 h-14 flex items-center justify-between">
         <div className="flex items-center gap-3">
           <span className="material-symbols-outlined text-primary" style={{ fontSize: 28 }}>engineering</span>
-          <h1 className="font-headline-sm text-headline-sm text-primary tracking-tight">TiSei CRM</h1>
+          <h1 className="font-headline-sm text-headline-sm text-primary tracking-tight">Береке ТехСервис</h1>
         </div>
         <div className="w-8 h-8 rounded-full bg-primary-container flex items-center justify-center text-on-primary-container font-bold text-xs">
           {user ? initials(user.fullName) : "?"}
@@ -81,7 +81,9 @@ export default function MasterCabinetPage() {
                 </div>
                 <div className="text-right">
                   <p className="text-[10px] text-on-surface-variant font-bold uppercase">Приоритет</p>
-                  <p className="font-headline-sm text-secondary">{PRIORITY_LABELS[req.priority]}</p>
+                  <p className="font-headline-sm text-secondary">
+                    {req.priority ? PRIORITY_LABELS[req.priority] : "—"}
+                  </p>
                 </div>
               </div>
               <p className="text-body-sm mb-2">{req.problemDescription || "—"}</p>

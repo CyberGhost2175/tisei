@@ -3,8 +3,8 @@ import type { ZodTypeProvider } from 'fastify-type-provider-zod';
 import { z } from 'zod';
 import { authenticate } from '../../common/middleware/authenticate.js';
 import { requireRole } from '../../common/middleware/requireRole.js';
-import { routingTodayQuerySchema, optimizeRouteBodySchema } from './routing.schemas.js';
-import { getTodayRoute, optimizeRoute } from './routing.service.js';
+import { routingTodayQuerySchema, optimizeRouteBodySchema, mapOverviewQuerySchema } from './routing.schemas.js';
+import { getTodayRoute, optimizeRoute, getMapOverview } from './routing.service.js';
 
 const routePointSchema = z.object({
   requestId: z.string(),
@@ -14,7 +14,7 @@ const routePointSchema = z.object({
   latitude: z.number(),
   longitude: z.number(),
   status: z.string(),
-  priority: z.string(),
+  priority: z.string().nullable(),
   isPartner: z.boolean(),
   order: z.number(),
 });
@@ -34,13 +34,36 @@ const routeResponseSchema = z.object({
   date: z.string().optional(),
 });
 
+const mapPointSchema = z.object({
+  requestId: z.string(),
+  number: z.string(),
+  companyOrFullName: z.string(),
+  phone: z.string(),
+  address: z.string(),
+  latitude: z.number(),
+  longitude: z.number(),
+  status: z.string(),
+  priority: z.string().nullable(),
+  isPartner: z.boolean(),
+  equipmentName: z.string().nullable(),
+  executors: z.array(z.object({ id: z.string(), fullName: z.string() })),
+});
+
+const mapOverviewResponseSchema = z.object({
+  total: z.number(),
+  totalWithoutCoords: z.number(),
+  byStatus: z.record(z.string(), z.number()),
+  points: z.array(mapPointSchema),
+  depot: depotSchema,
+});
+
 export async function routingRoutes(app: FastifyInstance): Promise<void> {
   const r = app.withTypeProvider<ZodTypeProvider>();
 
   r.get(
     '/today',
     {
-      preHandler: [authenticate, requireRole(['executor', 'manager', 'admin'])],
+      preHandler: [authenticate, requireRole(['executor', 'master', 'manager', 'admin'])],
       schema: {
         tags: ['Routing'],
         summary: 'Маршрут исполнителя на день (ближайший сосед + ссылка 2ГИС)',
@@ -58,10 +81,29 @@ export async function routingRoutes(app: FastifyInstance): Promise<void> {
       }),
   );
 
+  r.get(
+    '/map',
+    {
+      preHandler: [authenticate, requireRole(['manager', 'admin'])],
+      schema: {
+        tags: ['Routing'],
+        summary: 'Обзор заявок на карте (менеджер)',
+        security: [{ bearerAuth: [] }],
+        querystring: mapOverviewQuerySchema,
+        response: { 200: mapOverviewResponseSchema },
+      },
+    },
+    async (request) =>
+      getMapOverview(request.query, {
+        userId: request.authUser!.id,
+        role: request.authUser!.role,
+      }),
+  );
+
   r.post(
     '/optimize',
     {
-      preHandler: [authenticate, requireRole(['executor', 'manager', 'admin'])],
+      preHandler: [authenticate, requireRole(['executor', 'master', 'manager', 'admin'])],
       schema: {
         tags: ['Routing'],
         summary: 'Оптимизировать порядок точек маршрута',

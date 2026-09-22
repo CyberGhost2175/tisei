@@ -12,6 +12,7 @@ import {
   updateServiceEquipment,
   type ServiceEquipmentItem,
 } from "@/lib/service-equipment-api";
+import { ServiceEquipmentPhotos } from "./ServiceEquipmentPhotos";
 import { formatDate } from "@/lib/labels";
 import { matchesSearch } from "@/lib/search-utils";
 import { ApiError } from "@/lib/api";
@@ -22,9 +23,11 @@ const INPUT =
 
 export function ServiceEquipmentTab({
   isAdmin,
+  canManage = isAdmin,
   searchQuery = "",
 }: {
   isAdmin: boolean;
+  canManage?: boolean;
   searchQuery?: string;
 }) {
   const [items, setItems] = useState<ServiceEquipmentItem[]>([]);
@@ -35,6 +38,8 @@ export function ServiceEquipmentTab({
   const [saving, setSaving] = useState(false);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [returnItem, setReturnItem] = useState<ServiceEquipmentItem | null>(null);
+  const [returning, setReturning] = useState(false);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({
     companyOrFullName: "",
@@ -118,12 +123,18 @@ export function ServiceEquipmentTab({
     }
   };
 
-  const onReturn = async (item: ServiceEquipmentItem) => {
+  const onReturn = async () => {
+    if (!returnItem) return;
+    setReturning(true);
+    setError("");
     try {
-      await updateServiceEquipment(item.id, { status: "returned" });
+      await updateServiceEquipment(returnItem.id, { status: "returned" });
+      setReturnItem(null);
       void load();
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Ошибка обновления");
+    } finally {
+      setReturning(false);
     }
   };
 
@@ -144,13 +155,13 @@ export function ServiceEquipmentTab({
   return (
     <div className="space-y-4">
       <p className="text-body-sm text-on-surface-variant">
-        Оборудование, которое сейчас находится на ремонте в сервисе TiSei. При переводе заявки в статус
+        Оборудование, которое сейчас находится на ремонте в сервисе Береке ТехСервис. При переводе заявки в статус
         «В сервисе» карточка создаётся автоматически.
       </p>
 
       {error && <p className="text-error text-body-sm">{error}</p>}
 
-      {isAdmin && (
+      {canManage && (
         <button
           type="button"
           onClick={() => setShowForm((v) => !v)}
@@ -160,7 +171,7 @@ export function ServiceEquipmentTab({
         </button>
       )}
 
-      {showForm && isAdmin && (
+      {showForm && canManage && (
         <form onSubmit={(e) => void onAdd(e)} className="grid md:grid-cols-2 gap-3 p-4 border border-outline-variant rounded-xl bg-surface-container-low">
           <input className={INPUT} placeholder="Заведение / клиент *" value={form.companyOrFullName} onChange={(e) => setForm({ ...form, companyOrFullName: e.target.value })} required />
           <select className={INPUT} value={form.partnerEstablishmentId} onChange={(e) => setForm({ ...form, partnerEstablishmentId: e.target.value })}>
@@ -215,15 +226,25 @@ export function ServiceEquipmentTab({
                     </Link>
                   )}
                   <p className="text-[11px] text-outline mt-2">Принято: {formatDate(item.receivedAt)}</p>
+                  <ServiceEquipmentPhotos
+                    serviceEquipmentId={item.id}
+                    attachments={item.attachments ?? []}
+                    canManage={canManage}
+                    onChanged={() => void load()}
+                  />
                 </div>
-                {isAdmin && (
+                {(canManage || isAdmin) && (
                   <div className="flex flex-col gap-2 shrink-0">
-                    <button type="button" onClick={() => void onReturn(item)} className="text-primary text-body-sm hover:underline">
-                      Вернули клиенту
-                    </button>
-                    <button type="button" onClick={() => setDeleteId(item.id)} className="text-error text-body-sm hover:underline">
-                      Удалить
-                    </button>
+                    {canManage && (
+                      <button type="button" onClick={() => setReturnItem(item)} className="text-primary text-body-sm hover:underline">
+                        Вернули клиенту
+                      </button>
+                    )}
+                    {isAdmin && (
+                      <button type="button" onClick={() => setDeleteId(item.id)} className="text-error text-body-sm hover:underline">
+                        Удалить
+                      </button>
+                    )}
                   </div>
                 )}
               </div>
@@ -231,6 +252,20 @@ export function ServiceEquipmentTab({
           ))}
         </div>
       )}
+
+      <ConfirmModal
+        open={!!returnItem}
+        onClose={() => setReturnItem(null)}
+        onConfirm={() => void onReturn()}
+        title="Убрать оборудование из сервиса?"
+        description={
+          returnItem
+            ? `Оборудование «${returnItem.equipmentName || returnItem.equipmentCategory?.name || returnItem.equipmentCategoryText || "без названия"}» (${returnItem.companyOrFullName}) будет убрано из раздела «В сервисе».`
+            : undefined
+        }
+        confirmLabel="Да, вернули клиенту"
+        loading={returning}
+      />
 
       <ConfirmModal
         open={!!deleteId}

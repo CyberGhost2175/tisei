@@ -10,6 +10,7 @@ import {
   disable2faBodySchema,
   passwordResetRequestSchema,
   passwordResetConfirmSchema,
+  changePasswordBodySchema,
   authTokensResponseSchema,
   loginResponseSchema,
 } from './auth.schemas.js';
@@ -20,6 +21,7 @@ import {
   logout,
   requestPasswordReset,
   confirmPasswordReset,
+  changePassword,
   setup2fa,
   enable2fa,
   disable2fa,
@@ -148,6 +150,32 @@ export async function authRoutes(app: FastifyInstance): Promise<void> {
       await logout(request.cookies[REFRESH_COOKIE], reply);
       return { message: 'Вы успешно вышли из системы' };
     },
+  );
+
+  r.post(
+    '/change-password',
+    {
+      preHandler: [authenticate],
+      schema: {
+        tags: ['Auth'],
+        summary: 'Смена пароля текущего пользователя',
+        security: [{ bearerAuth: [] }],
+        body: changePasswordBodySchema,
+        response: { 200: messageResponseSchema },
+      },
+      config: {
+        rateLimit: {
+          max: 10,
+          timeWindow: '1 minute',
+        },
+      },
+    },
+    async (request) =>
+      changePassword(
+        request.authUser!.id,
+        request.body.currentPassword,
+        request.body.newPassword,
+      ),
   );
 
   r.post(

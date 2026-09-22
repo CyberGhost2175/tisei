@@ -3,7 +3,7 @@ import type { NextRequest } from "next/server";
 import { canAccessRoute } from "./lib/role-access";
 import type { UserRole } from "./lib/types";
 
-const PUBLIC = ["/login"];
+const PUBLIC = ["/login", "/act"];
 
 export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl;
@@ -32,5 +32,5 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: ["/((?!_next/static|_next/image|favicon.ico|icon.png|apple-icon.png|tisei-logo.png).*)"],
+  matcher: ["/((?!_next/static|_next/image|favicon.ico|icon.png|apple-icon.png|tisei-logo.png|bereke-logo.png|bereke-mark.png).*)"],
 };

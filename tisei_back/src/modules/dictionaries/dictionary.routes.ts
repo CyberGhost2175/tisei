@@ -43,8 +43,9 @@ function registerCrud(app: FastifyInstance, path: DictionaryType) {
       },
     },
     async (request) => {
-      const includeInactive =
-        request.query.includeInactive && request.authUser?.role === 'admin';
+      const role = request.authUser?.role;
+      const canSeeInactive = role === 'admin' || role === 'manager';
+      const includeInactive = request.query.includeInactive && canSeeInactive;
       return listDictionary(path, !includeInactive);
     },
   );
@@ -52,7 +53,7 @@ function registerCrud(app: FastifyInstance, path: DictionaryType) {
   r.post(
     `/${path}`,
     {
-      preHandler: [authenticate, requireRole(['admin'])],
+      preHandler: [authenticate, requireRole(['admin', 'manager'])],
       schema: {
         tags: ['Dictionaries'],
         summary: `Создать запись: ${path}`,
@@ -70,7 +71,7 @@ function registerCrud(app: FastifyInstance, path: DictionaryType) {
   r.patch(
     `/${path}/:id`,
     {
-      preHandler: [authenticate, requireRole(['admin'])],
+      preHandler: [authenticate, requireRole(['admin', 'manager'])],
       schema: {
         tags: ['Dictionaries'],
         summary: `Обновить запись: ${path}`,
@@ -87,7 +88,7 @@ function registerCrud(app: FastifyInstance, path: DictionaryType) {
   r.delete(
     `/${path}/:id`,
     {
-      preHandler: [authenticate, requireRole(['admin'])],
+      preHandler: [authenticate, requireRole(['admin', 'manager'])],
       schema: {
         tags: ['Dictionaries'],
         summary: `Удалить запись: ${path}`,

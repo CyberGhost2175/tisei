@@ -1,4 +1,15 @@
-import { apiFetch } from "./api";
+import { apiFetch, apiUpload } from "./api";
+
+export type ServiceEquipmentAttachment = {
+  id: string;
+  serviceEquipmentId: string;
+  uploadedById: string | null;
+  url: string;
+  fileName: string | null;
+  fileType: string | null;
+  sizeBytes: number | null;
+  createdAt: string;
+};
 
 export type ServiceEquipmentItem = {
   id: string;
@@ -16,6 +27,7 @@ export type ServiceEquipmentItem = {
   receivedAt: string;
   returnedAt: string | null;
   notes: string | null;
+  attachments?: ServiceEquipmentAttachment[];
 };
 
 export function fetchServiceEquipment(status?: "in_service" | "returned") {
@@ -60,4 +72,21 @@ export function updateServiceEquipment(
 
 export function deleteServiceEquipment(id: string) {
   return apiFetch<{ message: string }>(`/service-equipment/${id}`, { method: "DELETE" });
+}
+
+export function fetchServiceEquipmentAttachments(serviceEquipmentId: string) {
+  return apiFetch<ServiceEquipmentAttachment[]>(`/service-equipment/${serviceEquipmentId}/attachments`);
+}
+
+export function uploadServiceEquipmentPhoto(serviceEquipmentId: string, file: File) {
+  const form = new FormData();
+  form.append("file", file);
+  return apiUpload<ServiceEquipmentAttachment>(`/service-equipment/${serviceEquipmentId}/attachments`, form);
+}
+
+export function deleteServiceEquipmentPhoto(serviceEquipmentId: string, attachmentId: string) {
+  return apiFetch<{ message: string }>(
+    `/service-equipment/${serviceEquipmentId}/attachments/${attachmentId}`,
+    { method: "DELETE" },
+  );
 }

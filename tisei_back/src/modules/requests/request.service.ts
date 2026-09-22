@@ -1,4 +1,5 @@
 import {
+  AssignmentStatus,
   ClientType,
   CommentType,
   Prisma,
@@ -13,15 +14,22 @@ import {
   NotFoundError,
   BadRequestError,
 } from '../../common/errors/AppError.js';
-import { executorCanViewRequest } from './request-access.js';
+import { fieldRoleCanViewRequest } from './request-access.js';
 import { buildPaginated, toSkipTake, type PaginatedResult } from '../../common/utils/pagination.js';
 import { writeAuditLog } from '../audit/audit.service.js';
-import { notifyNewRequest } from '../notifications/notification.service.js';
+import { statusLabelRu } from '../../common/utils/labels.ru.js';
+import { isFieldRole, isPartnerMaster, isStaffMaster } from '../../common/utils/roles.js';
+import {
+  notifyNewRequest,
+  notifyRequestAssigned,
+  notifyRequestStatusChanged,
+} from '../notifications/notification.service.js';
 import { detectClientType } from './client-type.service.js';
 import { generateRequestNumber } from './request-number.service.js';
-import { assertTransition } from './status-transition.service.js';
+import { assertTransitionWithRole } from './status-transition.service.js';
 import { createServiceEquipmentFromRequest } from '../service-equipment/service-equipment.service.js';
 import { resolvePartnerLink, resolveRequestPriority } from './resolve-priority.js';
+import { resolvePartnerLocationId } from './partner-match.js';
 import type {
   CreateRequestBody,
   RequestListQuery,
@@ -34,8 +42,14 @@ const requestInclude = {
   client: true,
   equipmentCategory: true,
   malfunctionType: true,
-  assignments: { include: { executor: { select: { id: true, fullName: true, email: true } } } },
+  assignments: {
+    include: {
+      executor: { select: { id: true, fullName: true, email: true, role: true } },
+    },
+  },
   partnerEstablishment: { select: { id: true, name: true } },
+  partnerLocation: { select: { id: true, name: true, city: true, address: true } },
+  fromMaintenanceRequest: { select: { id: true, number: true } },
   closingForm: true,
 } satisfies Prisma.RequestInclude;
 
@@ -57,6 +71,14 @@ function buildWhere(query: RequestListQuery, auth: AuthContext): Prisma.RequestW
   if (query.priority) where.priority = query.priority;
   if (query.clientType) where.clientType = query.clientType;
 
+  if (query.kind === 'all') {
+    // оба типа
+  } else if (query.kind === 'maintenance') {
+    where.kind = 'maintenance';
+  } else {
+    where.kind = 'repair';
+  }
+
   if (query.deadlineFrom || query.deadlineTo) {
     where.deadline = {};
     if (query.deadlineFrom) where.deadline.gte = query.deadlineFrom;
@@ -72,20 +94,46 @@ function buildWhere(query: RequestListQuery, auth: AuthContext): Prisma.RequestW
     ];
   }
 
-  if (auth.role === 'executor') {
+  if (isFieldRole(auth.role)) {
     if (query.mine) {
       where.assignments = { some: { executorId: auth.userId } };
     } else if (query.available) {
-      where.assignments = { none: {} };
-      if (!query.status && !query.active) {
-        where.status = { notIn: ['closed', 'cancelled'] };
+      // Партнёрский мастер не видит свободный пул — только менеджер назначает.
+      if (isPartnerMaster(auth.role)) {
+        where.id = { in: [] };
+      } else {
+        where.assignments = { none: {} };
+        if (!query.status && !query.active) {
+          where.status = { notIn: ['closed', 'cancelled'] };
+        }
       }
+    } else if (isPartnerMaster(auth.role)) {
+      where.assignments = { some: { executorId: auth.userId } };
+    } else if (isStaffMaster(auth.role) && query.status === 'closed') {
+      // Штатный мастер в разделе «Закрытые» видит свои закрытые заявки.
+      where.assignments = { some: { executorId: auth.userId } };
     }
   } else if (query.executorId) {
     where.assignments = { some: { executorId: query.executorId } };
   }
 
   return where;
+}
+
+function hasAcceptedAssignment(request: RequestDto): boolean {
+  return request.assignments.some((a) => a.status === AssignmentStatus.accepted);
+}
+
+/** Если есть принятое назначение, а статус «новая» — переводим в «в работе». */
+async function syncAssignedStatusInProgress(request: RequestDto): Promise<RequestDto> {
+  if (request.status === RequestStatus.new && hasAcceptedAssignment(request)) {
+    return prisma.request.update({
+      where: { id: request.id },
+      data: { status: RequestStatus.in_progress },
+      include: requestInclude,
+    });
+  }
+  return request;
 }
 
 async function getRequestOrThrow(id: string, _auth?: AuthContext): Promise<RequestDto> {
@@ -96,7 +144,7 @@ async function getRequestOrThrow(id: string, _auth?: AuthContext): Promise<Reque
 
   if (!request) throw new NotFoundError('Заявка не найдена');
 
-  return request;
+  return syncAssignedStatusInProgress(request);
 }
 
 export async function listRequests(
@@ -110,17 +158,22 @@ export async function listRequests(
     [query.sortBy]: query.sortOrder,
   };
 
-  const [items, total] = await Promise.all([
+  const [rawItems, total] = await Promise.all([
     prisma.request.findMany({ where, skip, take, orderBy, include: requestInclude }),
     prisma.request.count({ where }),
   ]);
+
+  const items = await Promise.all(rawItems.map(syncAssignedStatusInProgress));
 
   return buildPaginated(items, total, query);
 }
 
 export async function getRequestById(id: string, auth: AuthContext): Promise<RequestDto> {
   const request = await getRequestOrThrow(id, auth);
-  if (auth.role === 'executor' && !executorCanViewRequest(request, auth.userId)) {
+  if (
+    isFieldRole(auth.role) &&
+    !fieldRoleCanViewRequest(request, auth.userId, auth.role)
+  ) {
     throw new ForbiddenError('Нет доступа к этой заявке');
   }
   return request;
@@ -147,6 +200,12 @@ export async function createRequest(
     partnerEstablishmentId: body.partnerEstablishmentId,
   });
 
+  const partnerLocationId = await resolvePartnerLocationId({
+    partnerEstablishmentId,
+    address: body.address,
+    companyOrFullName: body.companyOrFullName,
+  });
+
   const priority = await resolveRequestPriority({
     isCreate: true,
   });
@@ -159,6 +218,7 @@ export async function createRequest(
         clientType: clientType as ClientType,
         clientId,
         partnerEstablishmentId,
+        partnerLocationId,
         companyOrFullName: body.companyOrFullName,
         phone: body.phone,
         email: body.email,
@@ -175,16 +235,17 @@ export async function createRequest(
       include: requestInclude,
     });
 
-    if (auth) {
-      await tx.comment.create({
-        data: {
-          requestId: created.id,
-          authorId: auth.userId,
-          type: CommentType.system_event,
-          text: `Заявка создана (${source === RequestSource.site ? 'с сайта' : 'вручную'})`,
-        },
-      });
-    }
+    await tx.comment.create({
+      data: {
+        requestId: created.id,
+        authorId: auth?.userId ?? null,
+        type: CommentType.system_event,
+        text:
+          source === RequestSource.site
+            ? 'Заявка создана с сайта. Исполнитель не назначен.'
+            : 'Заявка создана вручную. Исполнитель не назначен.',
+      },
+    });
 
     return created;
   });
@@ -217,11 +278,14 @@ export async function updateRequest(
 ): Promise<RequestDto> {
   const existing = await getRequestOrThrow(id, auth);
 
-  if (body.clientType && body.clientType !== existing.clientType && auth.role === 'executor') {
+  if (body.clientType && body.clientType !== existing.clientType && isFieldRole(auth.role)) {
     throw new ForbiddenError('Исполнитель не может менять тип клиента');
   }
 
-  if ((body.priority !== undefined || body.partnerEstablishmentId !== undefined) && auth.role === 'executor') {
+  if (
+    (body.priority !== undefined || body.partnerEstablishmentId !== undefined) &&
+    isFieldRole(auth.role)
+  ) {
     throw new ForbiddenError('Исполнитель не может менять приоритет и партнёра');
   }
 
@@ -239,6 +303,14 @@ export async function updateRequest(
     partnerEstablishmentId = existing.partnerEstablishmentId;
   }
 
+  const address = body.address ?? existing.address;
+  const partnerLocationId = await resolvePartnerLocationId({
+    partnerEstablishmentId,
+    address,
+    companyOrFullName: companyName,
+    partnerLocationId: existing.partnerLocationId,
+  });
+
   const priority = await resolveRequestPriority({
     requestedPriority: body.priority,
     existingPriority: existing.priority,
@@ -252,6 +324,7 @@ export async function updateRequest(
       ...restBody,
       clientType: body.clientType as ClientType | undefined,
       partnerEstablishmentId,
+      partnerLocationId,
       priority,
     },
     include: requestInclude,
@@ -291,7 +364,7 @@ export async function changeRequestStatus(
   options?: { frozenReason?: string; equipmentCategoryId?: string },
 ): Promise<RequestDto> {
   const existing = await getRequestOrThrow(id, auth);
-  assertTransition(existing.status, status);
+  assertTransitionWithRole(existing.status, status, auth.role);
 
   const data: Prisma.RequestUpdateInput = { status };
 
@@ -322,10 +395,28 @@ export async function changeRequestStatus(
     data.closedAt = new Date();
   }
 
-  const updated = await prisma.request.update({
-    where: { id },
-    data,
-    include: requestInclude,
+  const reactivatingFromClosed =
+    existing.status === RequestStatus.closed && status !== RequestStatus.closed;
+
+  if (reactivatingFromClosed) {
+    data.closedAt = null;
+  }
+
+  const updated = await prisma.$transaction(async (tx) => {
+    // При реактивации закрытой заявки сбрасываем исполнителей — нужно назначить заново.
+    if (reactivatingFromClosed) {
+      await tx.requestAssignment.deleteMany({ where: { requestId: id } });
+      await tx.closingForm.updateMany({
+        where: { requestId: id },
+        data: { isLocked: false, confirmedAt: null },
+      });
+    }
+
+    return tx.request.update({
+      where: { id },
+      data,
+      include: requestInclude,
+    });
   });
 
   if (status === RequestStatus.in_service) {
@@ -337,7 +428,9 @@ export async function changeRequestStatus(
       requestId: id,
       authorId: auth.userId,
       type: CommentType.system_event,
-      text: `Статус изменён: ${existing.status} → ${status}`,
+      text: reactivatingFromClosed
+        ? `Статус изменён: ${statusLabelRu(existing.status)} → ${statusLabelRu(status)}. Исполнитель сброшен — назначьте заново.`
+        : `Статус изменён: ${statusLabelRu(existing.status)} → ${statusLabelRu(status)}`,
     },
   });
 
@@ -350,6 +443,19 @@ export async function changeRequestStatus(
     after: { status },
   });
 
+  void notifyRequestStatusChanged(
+    {
+      id: updated.id,
+      number: updated.number,
+      companyOrFullName: updated.companyOrFullName,
+    },
+    existing.status,
+    status,
+    { excludeUserId: auth.userId },
+  ).catch(() => {
+    /* уведомления не блокируют смену статуса */
+  });
+
   return updated;
 }
 
@@ -358,34 +464,61 @@ export async function assignExecutors(
   executorIds: string[],
   auth: AuthContext,
 ): Promise<RequestDto> {
-  if (auth.role === 'executor') {
-    throw new ForbiddenError('Исполнитель не может назначать других исполнителей');
+  if (isFieldRole(auth.role)) {
+    throw new ForbiddenError('Мастер не может назначать исполнителей');
   }
 
   await getRequestOrThrow(id, auth);
 
   const executors = await prisma.user.findMany({
-    where: { id: { in: executorIds }, role: 'executor', isActive: true },
+    where: { id: { in: executorIds }, role: { in: ['executor', 'master'] }, isActive: true },
   });
 
   if (executors.length !== executorIds.length) {
-    throw new BadRequestError('Один или несколько исполнителей не найдены');
+    throw new BadRequestError('Один или несколько мастеров не найдены');
   }
+
+  const names = executors.map((e) => e.fullName).join(', ');
+  const hasAccepted = executors.some((e) => isStaffMaster(e.role));
+  const offeredIds = executors.filter((e) => isPartnerMaster(e.role)).map((e) => e.id);
+  const assignedIds = executors.filter((e) => isStaffMaster(e.role)).map((e) => e.id);
 
   await prisma.$transaction([
     prisma.requestAssignment.deleteMany({ where: { requestId: id } }),
     prisma.requestAssignment.createMany({
-      data: executorIds.map((executorId) => ({ requestId: id, executorId })),
+      data: executors.map((e) => ({
+        requestId: id,
+        executorId: e.id,
+        status: isPartnerMaster(e.role)
+          ? AssignmentStatus.proposed
+          : AssignmentStatus.accepted,
+      })),
     }),
   ]);
 
   const existing = await prisma.request.findUnique({ where: { id }, select: { status: true } });
-  if (existing?.status === RequestStatus.new) {
+  if (hasAccepted && existing?.status === RequestStatus.new) {
     await prisma.request.update({
       where: { id },
       data: { status: RequestStatus.in_progress },
     });
   }
+
+  const commentText =
+    offeredIds.length > 0 && assignedIds.length === 0
+      ? `Предложена заявка мастеру: ${names}`
+      : offeredIds.length > 0
+        ? `Назначен / предложен мастер: ${names}`
+        : `Назначен мастер: ${names}`;
+
+  await prisma.comment.create({
+    data: {
+      requestId: id,
+      authorId: auth.userId,
+      type: CommentType.system_event,
+      text: commentText,
+    },
+  });
 
   await writeAuditLog({
     userId: auth.userId,
@@ -395,13 +528,39 @@ export async function assignExecutors(
     after: { executorIds },
   });
 
+  const assigned = await prisma.request.findUnique({
+    where: { id },
+    select: {
+      id: true,
+      number: true,
+      companyOrFullName: true,
+      address: true,
+    },
+  });
+  if (assigned) {
+    if (assignedIds.length > 0) {
+      void notifyRequestAssigned(assigned, assignedIds).catch(() => {
+        /* уведомления не блокируют назначение */
+      });
+    }
+    if (offeredIds.length > 0) {
+      void notifyRequestAssigned(assigned, offeredIds, { proposed: true }).catch(() => {
+        /* уведомления не блокируют назначение */
+      });
+    }
+  }
+
   return getRequestOrThrow(id, auth);
 }
 
-/** Исполнитель берёт заявку в работу */
+/** Штатный мастер берёт заявку в работу */
 export async function claimRequest(id: string, auth: AuthContext): Promise<RequestDto> {
-  if (auth.role !== 'executor') {
-    throw new ForbiddenError('Только исполнитель может взять заявку');
+  if (!isStaffMaster(auth.role)) {
+    throw new ForbiddenError(
+      isPartnerMaster(auth.role)
+        ? 'Мастер не может самостоятельно брать заявки — дождитесь назначения менеджера'
+        : 'Только штатный мастер может взять заявку',
+    );
   }
 
   const request = await prisma.request.findFirst({
@@ -417,7 +576,11 @@ export async function claimRequest(id: string, auth: AuthContext): Promise<Reque
   if (already) return request;
 
   await prisma.requestAssignment.create({
-    data: { requestId: id, executorId: auth.userId },
+    data: {
+      requestId: id,
+      executorId: auth.userId,
+      status: AssignmentStatus.accepted,
+    },
   });
 
   if (request.status === RequestStatus.new) {
@@ -430,7 +593,7 @@ export async function claimRequest(id: string, auth: AuthContext): Promise<Reque
         requestId: id,
         authorId: auth.userId,
         type: CommentType.system_event,
-        text: 'Исполнитель взял заявку в работу',
+        text: 'Штатный мастер взял заявку в работу',
       },
     });
   }
@@ -445,6 +608,110 @@ export async function claimRequest(id: string, auth: AuthContext): Promise<Reque
   return getRequestOrThrow(id, auth);
 }
 
+/** Партнёрский мастер принимает предложенную заявку */
+export async function acceptRequestOffer(id: string, auth: AuthContext): Promise<RequestDto> {
+  if (!isFieldRole(auth.role)) {
+    throw new ForbiddenError('Только мастер может принять предложенную заявку');
+  }
+
+  const request = await prisma.request.findFirst({
+    where: { id, deletedAt: null },
+    include: requestInclude,
+  });
+  if (!request) throw new NotFoundError('Заявка не найдена');
+
+  const mine = request.assignments.find((a) => a.executorId === auth.userId);
+  if (!mine) throw new BadRequestError('Вам не предложена эта заявка');
+  if (mine.status === AssignmentStatus.accepted) return request;
+
+  await prisma.requestAssignment.update({
+    where: { id: mine.id },
+    data: { status: AssignmentStatus.accepted },
+  });
+
+  if (request.status === RequestStatus.new) {
+    await prisma.request.update({
+      where: { id },
+      data: { status: RequestStatus.in_progress },
+    });
+  }
+
+  await prisma.comment.create({
+    data: {
+      requestId: id,
+      authorId: auth.userId,
+      type: CommentType.system_event,
+      text: 'Мастер принял предложенную заявку',
+    },
+  });
+
+  await writeAuditLog({
+    userId: auth.userId,
+    action: 'request.accept_offer',
+    entityType: 'Request',
+    entityId: id,
+  });
+
+  return getRequestOrThrow(id, auth);
+}
+
+/** Любой мастер отказывается от заявки — она возвращается в «Новые». */
+export async function declineRequest(id: string, auth: AuthContext): Promise<RequestDto> {
+  if (!isFieldRole(auth.role)) {
+    throw new ForbiddenError('Только мастер может отказаться от заявки');
+  }
+
+  const request = await prisma.request.findFirst({
+    where: { id, deletedAt: null },
+    include: requestInclude,
+  });
+  if (!request) throw new NotFoundError('Заявка не найдена');
+  if (request.status === 'closed' || request.status === 'cancelled') {
+    throw new BadRequestError('Нельзя отказаться от закрытой или отменённой заявки');
+  }
+
+  const mine = request.assignments.find((a) => a.executorId === auth.userId);
+  if (!mine) throw new BadRequestError('Вы не назначены на эту заявку');
+
+  await prisma.requestAssignment.delete({ where: { id: mine.id } });
+
+  await prisma.request.update({
+    where: { id },
+    data: { status: RequestStatus.new },
+  });
+
+  await prisma.comment.create({
+    data: {
+      requestId: id,
+      authorId: auth.userId,
+      type: CommentType.system_event,
+      text: 'Мастер отказался от заявки. Статус: Новая',
+    },
+  });
+
+  await writeAuditLog({
+    userId: auth.userId,
+    action: 'request.decline',
+    entityType: 'Request',
+    entityId: id,
+  });
+
+  void notifyRequestStatusChanged(
+    {
+      id: request.id,
+      number: request.number,
+      companyOrFullName: request.companyOrFullName,
+    },
+    request.status,
+    RequestStatus.new,
+    { excludeUserId: auth.userId },
+  ).catch(() => {
+    /* уведомления не блокируют отказ */
+  });
+
+  return getRequestOrThrow(id, auth);
+}
+
 export async function freezeRequest(
   id: string,
   frozenReason: string,
@@ -454,7 +721,7 @@ export async function freezeRequest(
 }
 
 export async function softDeleteRequest(id: string, auth: AuthContext): Promise<void> {
-  if (auth.role === 'executor') throw new ForbiddenError('Недостаточно прав');
+  if (isFieldRole(auth.role)) throw new ForbiddenError('Недостаточно прав');
   await getRequestOrThrow(id, auth);
 
   await prisma.request.update({ where: { id }, data: { deletedAt: new Date() } });
@@ -467,8 +734,31 @@ export async function softDeleteRequest(id: string, auth: AuthContext): Promise<
   });
 }
 
+/** Массовое мягкое удаление заявок. */
+export async function softDeleteRequests(ids: string[], auth: AuthContext): Promise<{ deleted: number }> {
+  if (isFieldRole(auth.role)) throw new ForbiddenError('Недостаточно прав');
+  const uniqueIds = [...new Set(ids.filter(Boolean))];
+  if (uniqueIds.length === 0) throw new BadRequestError('Не выбраны заявки');
+  if (uniqueIds.length > 100) throw new BadRequestError('За один раз не больше 100 заявок');
+
+  const result = await prisma.request.updateMany({
+    where: { id: { in: uniqueIds }, deletedAt: null },
+    data: { deletedAt: new Date() },
+  });
+
+  await writeAuditLog({
+    userId: auth.userId,
+    action: 'request.soft_delete_bulk',
+    entityType: 'Request',
+    entityId: uniqueIds[0]!,
+    after: { ids: uniqueIds, deleted: result.count },
+  });
+
+  return { deleted: result.count };
+}
+
 export async function restoreRequest(id: string, auth: AuthContext): Promise<RequestDto> {
-  if (auth.role === 'executor') throw new ForbiddenError('Недостаточно прав');
+  if (isFieldRole(auth.role)) throw new ForbiddenError('Недостаточно прав');
 
   const request = await prisma.request.findFirst({ where: { id, deletedAt: { not: null } } });
   if (!request) throw new NotFoundError('Заявка не найдена или не удалена');
@@ -504,7 +794,7 @@ export async function duplicateRequest(id: string, auth: AuthContext): Promise<R
       source: source.source,
       clientType: source.clientType,
       status: RequestStatus.new,
-      priority: source.priority,
+      priority: null,
       clientId: source.clientId,
       companyOrFullName: source.companyOrFullName,
       phone: source.phone,

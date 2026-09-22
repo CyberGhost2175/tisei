@@ -5,7 +5,8 @@ import Link from "next/link";
 import { Sidebar, MobileDrawer } from "../components/Sidebar";
 import { MobileNav } from "../components/MobileNav";
 import { MSym } from "../components/symbols";
-import { claimRequest, fetchRequests } from "@/lib/requests-api";
+import { ConfirmModal } from "../components/Modal";
+import { bulkDeleteRequests, claimRequest, fetchRequests } from "@/lib/requests-api";
 import { useAuth, useRequireAuth } from "@/lib/AuthProvider";
 import { usePolling } from "@/lib/usePolling";
 import { PRIORITY_LABELS, STATUS_LABELS, formatDate } from "@/lib/labels";
@@ -22,6 +23,8 @@ const STATUS_TABS: { key: StatusFilter; label: string }[] = [
   { key: "in_progress", label: "В работе" },
   { key: "awaiting_parts", label: "Запчасти" },
   { key: "in_service", label: "В сервисе" },
+  { key: "awaiting_approval", label: "Согласование" },
+  { key: "repeat", label: "Повтор" },
   { key: "closed", label: "Закрытые" },
 ];
 
@@ -29,7 +32,10 @@ export function RequestsTable() {
   useRequireAuth();
   const { user } = useAuth();
   const isExecutor = user?.role === "executor";
+  const isMaster = user?.role === "master";
+  const isField = isExecutor || isMaster;
   const canCreate = user?.role === "admin" || user?.role === "manager";
+  const canDelete = canCreate;
   const [items, setItems] = useState<ServiceRequest[]>([]);
   const [meta, setMeta] = useState({ page: 1, pageSize: 20, total: 0, totalPages: 1 });
   const [search, setSearch] = useState("");
@@ -39,6 +45,9 @@ export function RequestsTable() {
   const [error, setError] = useState("");
   const [claimingId, setClaimingId] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
+  const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [confirmDelete, setConfirmDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
 
   const load = useCallback(
     async (
@@ -63,17 +72,22 @@ export function RequestsTable() {
         if (isExecutor) {
           if (f === "mine") params.mine = true;
           if (f === "available") params.available = true;
+          // Закрытые — свои (история и реактивация).
+          if (status === "closed") params.mine = true;
+        } else if (isMaster) {
+          params.mine = true;
         }
         const data = await fetchRequests(params);
         setItems(data.items);
         setMeta(data.meta);
+        if (!silent) setSelectedIds(new Set());
       } catch (e) {
         if (!silent) setError(e instanceof ApiError ? e.message : "Ошибка загрузки");
       } finally {
         if (!silent) setLoading(false);
       }
     },
-    [search, filter, statusFilter, isExecutor],
+    [search, filter, statusFilter, isExecutor, isMaster],
   );
 
   useEffect(() => {
@@ -112,9 +126,63 @@ export function RequestsTable() {
     !isMine(req) &&
     !["closed", "cancelled"].includes(req.status);
 
-  const cols = isExecutor
-    ? ["Номер", "Клиент", "Проблема", "Статус", "Приоритет", "Исполнитель", "Создана", ""]
-    : ["Номер", "Клиент", "Проблема", "Статус", "Приоритет", "Исполнитель", "Создана"];
+  const allPageSelected = items.length > 0 && items.every((r) => selectedIds.has(r.id));
+  const someSelected = selectedIds.size > 0;
+
+  const toggleOne = (id: string) => {
+    setSelectedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
+
+  const toggleAllPage = () => {
+    if (allPageSelected) {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        for (const r of items) next.delete(r.id);
+        return next;
+      });
+    } else {
+      setSelectedIds((prev) => {
+        const next = new Set(prev);
+        for (const r of items) next.add(r.id);
+        return next;
+      });
+    }
+  };
+
+  const onBulkDelete = async () => {
+    const ids = [...selectedIds];
+    if (ids.length === 0) return;
+    setDeleting(true);
+    setError("");
+    try {
+      await bulkDeleteRequests(ids);
+      setConfirmDelete(false);
+      setSelectedIds(new Set());
+      void load(meta.page, search);
+    } catch (e) {
+      setError(e instanceof ApiError ? e.message : "Не удалось удалить заявки");
+      setConfirmDelete(false);
+    } finally {
+      setDeleting(false);
+    }
+  };
+
+  const cols = [
+    ...(canDelete ? [""] : []),
+    "Номер",
+    "Клиент",
+    "Проблема",
+    "Статус",
+    "Приоритет",
+    "Исполнитель",
+    "Создана",
+    ...(isField ? [""] : []),
+  ];
 
   return (
     <div className="bg-background text-on-surface md:h-screen md:overflow-hidden flex">
@@ -150,9 +218,23 @@ export function RequestsTable() {
               <h2 className="font-headline-md text-headline-md text-on-surface">Сервисные заявки</h2>
               <p className="font-body-sm text-body-sm text-on-surface-variant">
                 {loading ? "Загрузка..." : `Всего: ${meta.total}`}
+                {" · "}
+                <Link href="/maintenance" className="text-primary hover:underline">
+                  Обслуживание (ТО)
+                </Link>
               </p>
             </div>
-            <div className="flex gap-2">
+            <div className="flex flex-wrap gap-2">
+              {canDelete && someSelected && (
+                <button
+                  type="button"
+                  onClick={() => setConfirmDelete(true)}
+                  className="flex items-center gap-2 px-4 py-2 border border-error/40 text-error font-label-md rounded-lg hover:bg-error-container/20"
+                >
+                  <MSym name="delete" className="text-[18px]" />
+                  Удалить ({selectedIds.size})
+                </button>
+              )}
               {canCreate && (
                 <Link
                   href="/requests/new"
@@ -226,75 +308,137 @@ export function RequestsTable() {
               <table className="w-full text-left border-collapse">
                 <thead className="bg-surface-container-low sticky top-0 z-10">
                   <tr className="border-b border-outline-variant">
-                    {cols.map((h) => (
-                      <th key={h || "action"} className="px-4 py-3 font-label-md text-outline uppercase whitespace-nowrap">
-                        {h}
+                    {canDelete && (
+                      <th className="px-3 py-3 w-10">
+                        <input
+                          type="checkbox"
+                          checked={allPageSelected}
+                          onChange={toggleAllPage}
+                          disabled={items.length === 0}
+                          aria-label="Выбрать все на странице"
+                          className="size-4 accent-primary cursor-pointer"
+                        />
                       </th>
-                    ))}
+                    )}
+                    {cols
+                      .filter((h) => h !== "")
+                      .map((h) => (
+                        <th
+                          key={h}
+                          className="px-4 py-3 font-label-md text-outline uppercase whitespace-nowrap"
+                        >
+                          {h}
+                        </th>
+                      ))}
+                    {isField && <th className="px-4 py-3" />}
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-outline-variant">
-                  {items.map((req) => (
-                    <tr key={req.id} className="hover:bg-surface-container-low transition-colors">
-                      <td className="px-4 py-4 font-mono-data">
-                        <Link href={`/requests/${req.id}`} className="hover:text-primary hover:underline">
-                          {req.number}
-                        </Link>
-                      </td>
-                      <td className="px-4 py-4">
-                        <div className="flex flex-col">
-                          <span className="font-bold">{req.companyOrFullName}</span>
-                          <span className="text-body-sm text-on-surface-variant">{req.phone}</span>
-                        </div>
-                      </td>
-                      <td className="px-4 py-4 text-body-md max-w-xs truncate">
-                        {req.problemDescription || "—"}
-                      </td>
-                      <td className="px-4 py-4">
-                        <span className="px-2 py-1 rounded bg-primary-container/10 text-primary text-[11px] font-bold uppercase">
-                          {STATUS_LABELS[req.status]}
-                        </span>
-                      </td>
-                      <td className="px-4 py-4">
-                        <span
-                          className={
-                            req.priority === "critical"
-                              ? "px-2 py-1 rounded bg-error-container/20 text-error text-[11px] font-bold uppercase"
-                              : "text-body-sm font-bold"
-                          }
-                        >
-                          {PRIORITY_LABELS[req.priority]}
-                        </span>
-                      </td>
-                      <td className="px-4 py-4 text-body-sm">
-                        {req.assignments?.[0]?.executor.fullName ?? (
-                          <span className="italic text-outline">Не назначен</span>
+                  {items.map((req) => {
+                    const selected = selectedIds.has(req.id);
+                    return (
+                      <tr
+                        key={req.id}
+                        className={
+                          selected
+                            ? "bg-error-container/15 hover:bg-error-container/25 transition-colors"
+                            : req.partnerEstablishmentId
+                              ? "bg-sky-100/80 hover:bg-sky-100 transition-colors"
+                              : "hover:bg-surface-container-low transition-colors"
+                        }
+                      >
+                        {canDelete && (
+                          <td className="px-3 py-4">
+                            <input
+                              type="checkbox"
+                              checked={selected}
+                              onChange={() => toggleOne(req.id)}
+                              aria-label={`Выбрать ${req.number}`}
+                              className="size-4 accent-primary cursor-pointer"
+                            />
+                          </td>
                         )}
-                      </td>
-                      <td className="px-4 py-4 text-body-sm text-on-surface-variant">
-                        {formatDate(req.createdAt)}
-                      </td>
-                      {isExecutor && (
-                        <td className="px-4 py-4">
-                          {canClaim(req) ? (
-                            <button
-                              type="button"
-                              disabled={claimingId === req.id}
-                              onClick={() => void onClaim(req)}
-                              className="text-primary text-body-sm font-label-md hover:underline disabled:opacity-50"
-                            >
-                              {claimingId === req.id ? "..." : "Взять"}
-                            </button>
-                          ) : isMine(req) ? (
-                            <span className="text-primary text-body-sm">Моя</span>
-                          ) : null}
+                        <td className="px-4 py-4 font-mono-data">
+                          <Link
+                            href={`/requests/${req.id}`}
+                            className="hover:text-primary hover:underline"
+                          >
+                            {req.number}
+                          </Link>
+                          {req.fromMaintenanceRequest && (
+                            <span className="ml-2 text-[10px] font-bold uppercase text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded">
+                              С обслуживания
+                            </span>
+                          )}
+                          {req.partnerEstablishmentId && !req.fromMaintenanceRequest && (
+                            <span className="ml-2 text-[10px] font-bold uppercase text-sky-700">
+                              Партнёр
+                            </span>
+                          )}
                         </td>
-                      )}
-                    </tr>
-                  ))}
+                        <td className="px-4 py-4">
+                          <div className="flex flex-col">
+                            <span className="font-bold">{req.companyOrFullName}</span>
+                            <span className="text-body-sm text-on-surface-variant">{req.phone}</span>
+                          </div>
+                        </td>
+                        <td className="px-4 py-4 text-body-md max-w-xs truncate">
+                          {req.problemDescription || "—"}
+                        </td>
+                        <td className="px-4 py-4">
+                          <span className="px-2 py-1 rounded bg-primary-container/10 text-primary text-[11px] font-bold uppercase">
+                            {STATUS_LABELS[req.status]}
+                          </span>
+                        </td>
+                        <td className="px-4 py-4">
+                          <span
+                            className={
+                              req.priority === "P1"
+                                ? "px-2 py-1 rounded bg-error-container/20 text-error text-[11px] font-bold uppercase"
+                                : "text-body-sm font-bold"
+                            }
+                          >
+                            {req.priority ? PRIORITY_LABELS[req.priority] : "—"}
+                          </span>
+                        </td>
+                        <td className="px-4 py-4 text-body-sm">
+                          {req.assignments?.[0]?.executor.fullName ?? (
+                            <span className="italic text-outline">Не назначен</span>
+                          )}
+                        </td>
+                        <td className="px-4 py-4 text-body-sm text-on-surface-variant">
+                          {formatDate(req.createdAt)}
+                        </td>
+                        {isField && (
+                          <td className="px-4 py-4">
+                            {canClaim(req) ? (
+                              <button
+                                type="button"
+                                disabled={claimingId === req.id}
+                                onClick={() => void onClaim(req)}
+                                className="text-primary text-body-sm font-label-md hover:underline disabled:opacity-50"
+                              >
+                                {claimingId === req.id ? "..." : "Взять"}
+                              </button>
+                            ) : isMine(req) ? (
+                              <span className="text-primary text-body-sm">
+                                {req.assignments?.find((a) => a.executorId === user?.id)?.status ===
+                                "proposed"
+                                  ? "Предложена"
+                                  : "Моя"}
+                              </span>
+                            ) : null}
+                          </td>
+                        )}
+                      </tr>
+                    );
+                  })}
                   {!loading && items.length === 0 && (
                     <tr>
-                      <td colSpan={cols.length} className="px-4 py-12 text-center text-on-surface-variant">
+                      <td
+                        colSpan={cols.length}
+                        className="px-4 py-12 text-center text-on-surface-variant"
+                      >
                         Заявок пока нет.
                       </td>
                     </tr>
@@ -302,9 +446,10 @@ export function RequestsTable() {
                 </tbody>
               </table>
             </div>
-            <div className="bg-surface-container px-4 py-3 border-t border-outline-variant flex items-center justify-between">
+            <div className="bg-surface-container px-4 py-3 border-t border-outline-variant flex items-center justify-between gap-3 flex-wrap">
               <span className="text-body-sm text-on-surface-variant">
                 Стр. {meta.page} из {meta.totalPages}
+                {canDelete && someSelected ? ` · выбрано: ${selectedIds.size}` : ""}
               </span>
               <div className="flex gap-2">
                 <button
@@ -330,6 +475,19 @@ export function RequestsTable() {
       </div>
 
       <MobileNav active="tasks" />
+
+      <ConfirmModal
+        open={confirmDelete}
+        onClose={() => setConfirmDelete(false)}
+        onConfirm={() => void onBulkDelete()}
+        title="Удалить выбранные заявки?"
+        description={`Точно удалить ${selectedIds.size} заявк${
+          selectedIds.size === 1 ? "у" : selectedIds.size < 5 ? "и" : "ок"
+        }? Их можно будет восстановить в течение 30 дней.`}
+        confirmLabel="Да, удалить"
+        loading={deleting}
+        destructive
+      />
     </div>
   );
 }

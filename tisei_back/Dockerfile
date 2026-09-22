@@ -38,6 +38,7 @@ COPY --from=prod-deps --chown=tisei:nodejs /app/node_modules ./node_modules
 COPY --from=prod-deps --chown=tisei:nodejs /app/prisma ./prisma
 COPY --from=builder --chown=tisei:nodejs /app/dist ./dist
 COPY --chown=tisei:nodejs package.json docker-entrypoint.sh ./
+COPY --chown=tisei:nodejs scripts ./scripts
 
 RUN chmod +x docker-entrypoint.sh
 

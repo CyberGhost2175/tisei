@@ -3,7 +3,8 @@ import type { UserRole } from "./types";
 export const ROLE_LABELS: Record<UserRole, string> = {
   admin: "Администратор",
   manager: "Менеджер",
-  executor: "Исполнитель",
+  executor: "Штатный мастер",
+  master: "Мастер",
 };
 
 export const ROLE_ACCESS: Record<UserRole, string[]> = {
@@ -24,8 +25,16 @@ export const ROLE_ACCESS: Record<UserRole, string[]> = {
   executor: [
     "Свои и свободные заявки",
     "Взятие заявок в работу",
+    "Отказ от назначенной заявки",
     "Карта маршрута",
-    "Закрытие заявок (анкета)",
+    "Закрытие заявок (анкета, 10% в кассу)",
+    "Комментарии и вложения",
+  ],
+  master: [
+    "Только предложенные менеджером заявки",
+    "Принять или отказаться от предложения",
+    "Карта маршрута (после принятия)",
+    "Закрытие заявок (анкета, 20% в кассу)",
     "Комментарии и вложения",
   ],
 };
@@ -34,6 +43,8 @@ export const ROLE_ACCESS: Record<UserRole, string[]> = {
 export const ROUTE_ROLES: Record<string, UserRole[]> = {
   "/users": ["admin"],
   "/dictionaries": ["admin", "manager"],
+  "/in-service": ["admin", "manager"],
+  "/warehouse": ["admin", "manager"],
   "/analytics": ["admin", "manager"],
   "/kpi": ["admin", "manager"],
   "/requests/new": ["admin", "manager"],
@@ -44,4 +55,16 @@ export function canAccessRoute(path: string, role: UserRole | undefined): boolea
   const rule = Object.entries(ROUTE_ROLES).find(([prefix]) => path.startsWith(prefix));
   if (!rule) return true;
   return rule[1].includes(role);
+}
+
+export function isFieldRole(role: UserRole | undefined): boolean {
+  return role === "executor" || role === "master";
+}
+
+export function isStaffMaster(role: UserRole | undefined): boolean {
+  return role === "executor";
+}
+
+export function isPartnerMaster(role: UserRole | undefined): boolean {
+  return role === "master";
 }

@@ -5,21 +5,27 @@ import type {
   CreateServiceEquipmentBody,
   UpdateServiceEquipmentBody,
 } from './service-equipment.schemas.js';
+import { mapAttachmentsForDto } from './service-equipment-attachment.service.js';
 
 const include = {
   partnerEstablishment: { select: { id: true, name: true } },
   equipmentCategory: { select: { id: true, name: true } },
   request: { select: { id: true, number: true } },
+  attachments: { orderBy: { createdAt: 'desc' as const } },
 } as const;
 
-function toDto(row: Awaited<ReturnType<typeof prisma.serviceEquipment.findFirst>>) {
-  if (!row) throw new NotFoundError('Запись не найдена');
+type ServiceEquipmentRow = NonNullable<
+  Awaited<ReturnType<typeof prisma.serviceEquipment.findFirst<{ include: typeof include }>>>
+>;
+
+async function toDto(row: ServiceEquipmentRow) {
   return {
     ...row,
     receivedAt: row.receivedAt.toISOString(),
     returnedAt: row.returnedAt?.toISOString() ?? null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
+    attachments: await mapAttachmentsForDto(row.attachments),
   };
 }
 
@@ -29,7 +35,7 @@ export async function listServiceEquipment(status?: ServiceEquipmentStatus) {
     include,
     orderBy: [{ status: 'asc' }, { receivedAt: 'desc' }],
   });
-  return rows.map((r) => toDto(r));
+  return Promise.all(rows.map((r) => toDto(r)));
 }
 
 export async function createServiceEquipment(body: CreateServiceEquipmentBody) {
@@ -49,7 +55,7 @@ export async function createServiceEquipment(body: CreateServiceEquipmentBody) {
     },
     include,
   });
-  return toDto(row);
+  return await toDto(row);
 }
 
 export async function createServiceEquipmentFromRequest(requestId: string) {
@@ -112,7 +118,7 @@ export async function updateServiceEquipment(id: string, body: UpdateServiceEqui
     },
     include,
   });
-  return toDto(row);
+  return await toDto(row);
 }
 
 export async function deleteServiceEquipment(id: string) {

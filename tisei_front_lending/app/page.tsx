@@ -14,7 +14,7 @@ export default function Home() {
       <header className="fixed top-0 w-full z-50 bg-primary shadow-sm h-20 flex items-center border-b border-outline-variant/20">
         <div className="flex justify-between items-center w-full px-5 md:px-lg lg:px-xl max-w-[1280px] mx-auto h-20">
           <div className="flex items-center gap-base">
-            <img alt="TiSei" className="h-10 w-auto" src="/tisei-logo.png" />
+            <img alt="Береке ТехСервис" className="h-10 w-auto" src="/bereke-logo.png" />
           </div>
           <nav className="hidden md:flex items-center gap-md">
             <a className="text-on-primary hover:text-secondary-fixed-dim transition-colors font-label-md text-label-md" href="#services">Услуги</a>
@@ -218,12 +218,12 @@ export default function Home() {
         </div>
       </section>
 
-      {/* Section 6: Why TiSei */}
+      {/* Section 6: Why Bereke */}
       <section className="py-14 md:py-xl bg-surface">
         <div className="max-w-[1280px] mx-auto px-5 md:px-lg lg:px-xl">
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-xl items-center">
             <div className="space-y-lg">
-              <h2 className="text-primary font-headline-lg text-headline-lg">Почему выбирают TiSei</h2>
+              <h2 className="text-primary font-headline-lg text-headline-lg">Почему выбирают Береке ТехСервис</h2>
               <ul className="space-y-md">
                 <li className="flex items-start gap-md">
                   <span className="material-symbols-outlined text-secondary-container p-xs bg-secondary-fixed rounded-[12px]" style={filled}>check</span>
@@ -258,7 +258,7 @@ export default function Home() {
             <div className="relative">
               <div className="absolute -top-lg -left-lg w-32 h-32 bg-secondary-fixed rounded-[12px] blur-3xl opacity-50"></div>
               <div className="relative bg-surface-container rounded-2xl p-md border border-outline-variant shadow-xl overflow-hidden">
-                <img className="w-full h-auto rounded-[8px]" alt="Сервисный инженер TiSei" src="/landing/why-tisei.png" />
+                <img className="w-full h-auto rounded-[8px]" alt="Сервисный инженер Береке ТехСервис" src="/landing/why-tisei.png" />
               </div>
             </div>
           </div>
@@ -320,7 +320,7 @@ export default function Home() {
                   <span className="material-symbols-outlined" style={filled}>star</span>
                   <span className="material-symbols-outlined" style={filled}>star</span>
                 </div>
-                <p className="italic text-on-surface-variant mb-lg font-body-md">&quot;TiSei выручили, когда у нас в ресторане в субботу вечером полетел ледогенератор. Мастер был через час. Починили быстро, работа не встала.&quot;</p>
+                <p className="italic text-on-surface-variant mb-lg font-body-md">&quot;Береке ТехСервис выручили, когда у нас в ресторане в субботу вечером полетел ледогенератор. Мастер был через час. Починили быстро, работа не встала.&quot;</p>
               </div>
               <div className="flex items-center gap-md">
                 <div className="w-12 h-12 bg-white rounded-[2px] border border-outline-variant/30 overflow-hidden flex items-center justify-center">
@@ -416,7 +416,7 @@ export default function Home() {
               </div>
               <div className="mt-xl relative h-48 rounded-[8px] overflow-hidden border border-outline-variant/30" id="contacts">
                 <iframe
-                  title="TiSei на карте"
+                  title="Береке ТехСервис на карте"
                   src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d274.12380320578984!2d71.47640807550027!3d51.13334935040133!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x424583e3df7af927%3A0xe0a61ac31d911428!2z0JbQsNC90LrQtdC90YIgMTgwLCDQkNGB0YLQsNC90LAgMDIwMDAw!5e0!3m2!1sru!2skz!4v1783337778567!5m2!1sru!2skz"
                   className="w-full h-full border-0"
                   allowFullScreen
@@ -433,8 +433,8 @@ export default function Home() {
       <footer className="bg-primary text-on-primary border-t border-outline-variant/20 py-14 md:py-xl">
         <div className="max-w-[1280px] mx-auto px-5 md:px-lg lg:px-xl grid grid-cols-1 md:grid-cols-4 gap-md">
           <div className="space-y-md">
-            <img alt="TiSei Logo" className="h-10 mb-md" src="/tisei-logo.png" />
-            <p className="text-on-primary/60 font-body-md">Лидер в области технического обслуживания промышленного оборудования в РК.</p>
+            <img alt="Береке ТехСервис" className="h-10 mb-md" src="/bereke-logo.png" />
+            <p className="text-on-primary/60 font-body-md">Лидер в области технического обслуживания промышленного оборудования в Астане.</p>
             <div className="flex gap-md">
              
             </div>
@@ -459,9 +459,9 @@ export default function Home() {
           </div>
           <div>
             <h4 className="font-headline-md mb-md">Юридическая информация</h4>
-            <p className="text-on-primary/60 mb-md font-body-md">ИП &quot;TiSei Service&quot;</p>
+            <p className="text-on-primary/60 mb-md font-body-md">ИП &quot;Береке ТехСервис&quot;</p>
             <Link className="text-label-md text-secondary-fixed-dim hover:underline underline-offset-4" href="/privacy">Политика конфиденциальности</Link>
-            <p className="mt-lg text-on-primary/40 font-mono-data text-xs">© 2024 TiSei. Все права защищены. Казахстан.</p>
+            <p className="mt-lg text-on-primary/40 font-mono-data text-xs">© 2024 Береке ТехСервис. Все права защищены. Казахстан.</p>
           </div>
         </div>
       </footer>

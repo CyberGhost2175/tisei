@@ -1,7 +1,7 @@
 export const API_URL =
   process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:4000/api/v1";
 
-export type UserRole = "manager" | "executor" | "admin";
+export type UserRole = "manager" | "executor" | "master" | "admin";
 
 export type RequestStatus =
   | "new"
@@ -9,10 +9,15 @@ export type RequestStatus =
   | "awaiting_parts"
   | "frozen"
   | "in_service"
+  | "awaiting_approval"
+  | "repeat"
   | "closed"
   | "cancelled";
 
-export type RequestPriority = "critical" | "high" | "normal" | "low";
+export type AssignmentStatus = "proposed" | "accepted";
+
+/** P1 = критический … P4 = низкий */
+export type RequestPriority = "P1" | "P2" | "P3" | "P4";
 
 export interface AuthUser {
   id: string;
@@ -24,7 +29,8 @@ export interface AuthUser {
 
 export interface RequestAssignment {
   executorId: string;
-  executor: { id: string; fullName: string; email: string };
+  status?: AssignmentStatus;
+  executor: { id: string; fullName: string; email: string; role?: UserRole };
 }
 
 export interface ServiceRequest {
@@ -33,9 +39,14 @@ export interface ServiceRequest {
   source: "site" | "manual";
   clientType: "serviced" | "new_from_site";
   status: RequestStatus;
-  priority: RequestPriority;
+  priority: RequestPriority | null;
+  kind?: "repair" | "maintenance";
   partnerEstablishmentId?: string | null;
   partnerEstablishment?: { id: string; name: string } | null;
+  partnerLocation?: { id: string; name: string; city: string; address: string } | null;
+  fromMaintenanceRequestId?: string | null;
+  fromMaintenanceRequest?: { id: string; number: string } | null;
+  maintenanceFindings?: string | null;
   companyOrFullName: string;
   phone: string;
   email: string | null;
@@ -86,9 +97,13 @@ export interface ClosingFormData {
   workPerformed: string | null;
   incomeAmount: number;
   expenseAmount: number;
+  partsExpenseAmount: number;
+  additionalExpenseAmount: number;
   profit: number;
   companyCommission: number;
   executorPayout: number;
+  companyCommissionRate?: number;
+  executorPayoutRate?: number;
   isLocked: boolean;
   confirmedAt: string | null;
   createdAt: string;
@@ -117,6 +132,29 @@ export interface RouteDepot {
   address: string;
   latitude: number;
   longitude: number;
+}
+
+export interface MapRequestPoint {
+  requestId: string;
+  number: string;
+  companyOrFullName: string;
+  phone: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+  status: string;
+  priority: string;
+  isPartner: boolean;
+  equipmentName: string | null;
+  executors: Array<{ id: string; fullName: string }>;
+}
+
+export interface MapOverview {
+  total: number;
+  totalWithoutCoords: number;
+  byStatus: Record<string, number>;
+  points: MapRequestPoint[];
+  depot: RouteDepot;
 }
 
 export interface OptimizedRoute {
@@ -183,7 +221,7 @@ export interface CreateRequestPayload {
   problemDescription?: string;
   malfunctionTypeId?: string;
   malfunctionCustomText?: string;
-  priority?: RequestPriority;
+  priority?: RequestPriority | null;
   partnerEstablishmentId?: string | null;
   deadline?: string;
   clientType?: "serviced" | "new_from_site";

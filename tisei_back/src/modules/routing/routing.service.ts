@@ -1,8 +1,9 @@
+import type { Prisma } from '@prisma/client';
 import type { UserRole } from '@prisma/client';
 import { prisma } from '../../config/prisma.js';
 import { BadRequestError, ForbiddenError } from '../../common/errors/AppError.js';
 import { DEPOT_CENTER, DEPOT_ADDRESS, geocodeAddress } from '../../common/geocode/geocode-address.js';
-import type { OptimizeRouteBody, RoutingTodayQuery } from './routing.schemas.js';
+import type { MapOverviewQuery, OptimizeRouteBody, RoutingTodayQuery } from './routing.schemas.js';
 
 export interface RoutePoint {
   requestId: string;
@@ -12,7 +13,7 @@ export interface RoutePoint {
   latitude: number;
   longitude: number;
   status: string;
-  priority: string;
+  priority: string | null;
   isPartner: boolean;
   order: number;
 }
@@ -172,12 +173,13 @@ async function fetchActiveRequestsForExecutor(executorId: string) {
     where: {
       deletedAt: null,
       status: { notIn: ['closed', 'cancelled'] },
-      assignments: { some: { executorId } },
+      assignments: { some: { executorId, status: 'accepted' } },
     },
     select: {
       id: true,
       number: true,
       companyOrFullName: true,
+      phone: true,
       address: true,
       latitude: true,
       longitude: true,
@@ -197,7 +199,7 @@ function toRoutePoint(r: {
   latitude: number;
   longitude: number;
   status: string;
-  priority: string;
+  priority: string | null;
   partnerEstablishmentId: string | null;
 }): Omit<RoutePoint, 'order'> {
   return {
@@ -216,8 +218,11 @@ function toRoutePoint(r: {
 export async function getTodayRoute(query: RoutingTodayQuery, auth: AuthContext) {
   let executorId = query.executorId ?? auth.userId;
 
-  if (auth.role === 'executor' && executorId !== auth.userId) {
-    throw new ForbiddenError('Исполнитель может смотреть только свой маршрут');
+  if (
+    (auth.role === 'executor' || auth.role === 'master') &&
+    executorId !== auth.userId
+  ) {
+    throw new ForbiddenError('Мастер может смотреть только свой маршрут');
   }
 
   const date = query.date ?? new Date();
@@ -233,18 +238,137 @@ export async function getTodayRoute(query: RoutingTodayQuery, auth: AuthContext)
   return buildRouteResponse(executorId, ordered, date.toISOString().slice(0, 10));
 }
 
+export interface MapRequestPoint {
+  requestId: string;
+  number: string;
+  companyOrFullName: string;
+  phone: string;
+  address: string;
+  latitude: number;
+  longitude: number;
+  status: string;
+  priority: string | null;
+  isPartner: boolean;
+  equipmentName: string | null;
+  executors: Array<{ id: string; fullName: string }>;
+}
+
+function toMapPoint(r: {
+  id: string;
+  number: string;
+  companyOrFullName: string;
+  phone: string;
+  address: string | null;
+  latitude: number;
+  longitude: number;
+  status: string;
+  priority: string | null;
+  partnerEstablishmentId: string | null;
+  equipmentName: string | null;
+  assignments: Array<{ executor: { id: string; fullName: string } }>;
+}): MapRequestPoint {
+  return {
+    requestId: r.id,
+    number: r.number,
+    companyOrFullName: r.companyOrFullName,
+    phone: r.phone,
+    address: r.address ?? '',
+    latitude: r.latitude,
+    longitude: r.longitude,
+    status: r.status,
+    priority: r.priority,
+    isPartner: !!r.partnerEstablishmentId,
+    equipmentName: r.equipmentName,
+    executors: r.assignments.map((a) => a.executor),
+  };
+}
+
+export async function getMapOverview(query: MapOverviewQuery, auth: AuthContext) {
+  if (auth.role === 'executor' || auth.role === 'master') {
+    throw new ForbiddenError('Обзор карты доступен менеджерам и администраторам');
+  }
+
+  const where: Prisma.RequestWhereInput = {
+    deletedAt: null,
+  };
+
+  if (query.status) {
+    where.status = query.status;
+  } else if (query.active !== false) {
+    where.status = { notIn: ['closed', 'cancelled'] };
+  }
+
+  if (query.priority) where.priority = query.priority;
+
+  if (query.unassigned) {
+    where.assignments = { none: {} };
+  } else if (query.executorId) {
+    where.assignments = { some: { executorId: query.executorId } };
+  }
+
+  const select = {
+    id: true,
+    number: true,
+    companyOrFullName: true,
+    phone: true,
+    address: true,
+    latitude: true,
+    longitude: true,
+    status: true,
+    priority: true,
+    partnerEstablishmentId: true,
+    equipmentName: true,
+    assignments: {
+      include: { executor: { select: { id: true, fullName: true } } },
+    },
+  } as const;
+
+  const allRequests = await prisma.request.findMany({
+    where,
+    select,
+    orderBy: { createdAt: 'desc' },
+  });
+
+  const withoutCoords = allRequests.filter((r) => r.latitude == null || r.longitude == null);
+  await ensureRequestCoordinates(withoutCoords);
+
+  const withCoords = allRequests.filter((r) => r.latitude != null && r.longitude != null);
+  const points = withCoords.map((r) =>
+    toMapPoint({ ...r, latitude: r.latitude!, longitude: r.longitude! }),
+  );
+
+  const byStatus: Record<string, number> = {};
+  for (const p of points) {
+    byStatus[p.status] = (byStatus[p.status] ?? 0) + 1;
+  }
+
+  return {
+    total: points.length,
+    totalWithoutCoords: allRequests.length - withCoords.length,
+    byStatus,
+    points,
+    depot: ROUTE_DEPOT,
+  };
+}
+
 export async function optimizeRoute(body: OptimizeRouteBody, auth: AuthContext) {
   const executorId = body.executorId ?? auth.userId;
 
-  if (auth.role === 'executor' && executorId !== auth.userId) {
-    throw new ForbiddenError('Исполнитель может оптимизировать только свой маршрут');
+  if (
+    (auth.role === 'executor' || auth.role === 'master') &&
+    executorId !== auth.userId
+  ) {
+    throw new ForbiddenError('Мастер может оптимизировать только свой маршрут');
   }
 
   const requests = await prisma.request.findMany({
     where: {
       id: { in: body.requestIds },
       deletedAt: null,
-      assignments: auth.role === 'executor' ? { some: { executorId: auth.userId } } : undefined,
+      assignments:
+        auth.role === 'executor' || auth.role === 'master'
+          ? { some: { executorId: auth.userId, status: 'accepted' } }
+          : undefined,
     },
     select: {
       id: true,

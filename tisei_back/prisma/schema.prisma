@@ -16,7 +16,8 @@ datasource db {
 
 enum UserRole {
   manager
-  executor
+  executor // штатный мастер
+  master   // мастер (партнёрский): только по назначению, 20% в кассу
   admin
 }
 
@@ -36,15 +37,22 @@ enum RequestStatus {
   awaiting_parts
   frozen
   in_service
+  awaiting_approval // ждёт согласование
+  repeat            // повтор
   closed
   cancelled
 }
 
+enum AssignmentStatus {
+  proposed // предложена мастеру, ждёт ответа
+  accepted // принята / назначена штатному
+}
+
 enum RequestPriority {
-  critical
-  high
-  normal
-  low
+  P1 // критический
+  P2 // высокий
+  P3 // средний
+  P4 // низкий
 }
 
 enum CommentType {
@@ -66,6 +74,16 @@ enum ThemeMode {
 enum ServiceEquipmentStatus {
   in_service
   returned
+}
+
+enum PartSection {
+  SERVICE // СЕРВИС
+  KFC
+}
+
+enum RequestKind {
+  repair       // обычный ремонт
+  maintenance  // ежемесячное плановое ТО
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -92,10 +110,13 @@ model User {
   assignedRequests        RequestAssignment[]
   authoredComments        Comment[]
   uploadedAttachments     Attachment[]
+  serviceEquipmentAttachments ServiceEquipmentAttachment[]
+  partUsagesAdded             RequestPartUsage[]
   closingForms            ClosingForm[]
   notifications           Notification[]
   notificationPreferences NotificationPreference[]
   pushSubscriptions       PushSubscription[]
+  devicePushTokens        DevicePushToken[]
   auditLogs               AuditLog[]
   passwordResetTokens     PasswordResetToken[]
   refreshTokens           RefreshToken[]
@@ -218,21 +239,106 @@ model FreezeReason {
   @@map("freeze_reasons")
 }
 
-// Partner restaurant chains — requests get critical priority
+// Partner restaurant chains
 model PartnerEstablishment {
   id        String   @id @default(cuid())
   name      String   @unique
   aliases   String[] @default([])
   isBuiltin Boolean  @default(false)
   isActive  Boolean  @default(true)
+
+  /// Участвует в ежемесячном плановом ТО
+  maintenanceEnabled  Boolean  @default(false)
+  /// День месяца дедлайна закрытия ТО: 20 = до 20-го текущего периода; 1 = до 1-го следующего месяца
+  maintenanceCloseDay Int      @default(20)
+  /// Цена за точку в акте ТО (с НДС), ₸ — общая, если у точки нет своей maintenancePrice
+  maintenanceUnitPrice Decimal? @db.Decimal(14, 2)
+  /// true = цена уже с НДС (KFC); false = без НДС (Golpas КП)
+  maintenancePriceIncludesVat Boolean @default(true)
+  maintenanceCustomerName    String?
+  maintenanceCustomerBin     String?
+  maintenanceCustomerAddress String?
+  maintenanceContractNumber  String?
+  maintenanceContractDate    DateTime?
+  maintenanceExecutorName    String?
+  maintenanceExecutorBin     String?
+  maintenanceExecutorAddress String?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
-  requests Request[]
-
-  serviceEquipment ServiceEquipment[]
+  requests           Request[]
+  locations          PartnerLocation[]
+  maintenancePeriods MaintenancePeriodSetting[]
+  serviceEquipment   ServiceEquipment[]
 
   @@map("partner_establishments")
+}
+
+// Physical outlets / points of a partner chain
+model PartnerLocation {
+  id                     String   @id @default(cuid())
+  partnerEstablishmentId String
+  name                   String
+  city                   String   @default("Астана")
+  address                String
+  /// Кол-во оборудования на точке (для ТО)
+  equipmentQuantity      Int?
+  /// Цена ежемесячного ТО по этой точке, ₸ (если null — берётся partner.maintenanceUnitPrice)
+  maintenancePrice       Decimal? @db.Decimal(14, 2)
+  isActive               Boolean  @default(true)
+  createdAt              DateTime @default(now())
+  updatedAt              DateTime @updatedAt
+
+  partnerEstablishment PartnerEstablishment @relation(fields: [partnerEstablishmentId], references: [id], onDelete: Cascade)
+  requests             Request[]
+  repairActPeriods     RepairActPeriodSetting[]
+
+  @@unique([partnerEstablishmentId, name])
+  @@index([partnerEstablishmentId])
+  @@map("partner_locations")
+}
+
+/// Настройки АВР по ремонту за период (на каждую точку — свой акт)
+model RepairActPeriodSetting {
+  id               String   @id @default(cuid())
+  partnerLocationId String
+  /// YYYY-MM
+  period           String
+  /// Дата составления акта (по умолчанию 22-е число месяца периода)
+  actDate          DateTime?
+  actNumber        Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  partnerLocation PartnerLocation @relation(fields: [partnerLocationId], references: [id], onDelete: Cascade)
+
+  @@unique([partnerLocationId, period])
+  @@index([period])
+  @@map("repair_act_period_settings")
+}
+
+/// Настройки периода ТО (редактируемые даты закрытия / дата акта)
+model MaintenancePeriodSetting {
+  id                     String   @id @default(cuid())
+  partnerEstablishmentId String
+  /// YYYY-MM
+  period                 String
+  /// До какой даты мастер должен закрыть все точки
+  closeByDate            DateTime
+  /// Дата составления акта (по умолчанию 22-е число месяца периода)
+  actDate                DateTime?
+  actNumber              Int?
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  partnerEstablishment PartnerEstablishment @relation(fields: [partnerEstablishmentId], references: [id], onDelete: Cascade)
+
+  @@unique([partnerEstablishmentId, period])
+  @@index([period])
+  @@map("maintenance_period_settings")
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -258,14 +364,28 @@ model Request {
 
   source     RequestSource   @default(manual)
   clientType ClientType      @default(new_from_site)
-  status     RequestStatus   @default(new)
-  priority   RequestPriority @default(normal)
+  status     RequestStatus    @default(new)
+  priority   RequestPriority?
+  kind       RequestKind      @default(repair)
 
   clientId String?
   client   Client? @relation(fields: [clientId], references: [id], onDelete: SetNull)
 
   partnerEstablishmentId String?
   partnerEstablishment   PartnerEstablishment? @relation(fields: [partnerEstablishmentId], references: [id], onDelete: SetNull)
+
+  partnerLocationId String?
+  partnerLocation   PartnerLocation? @relation(fields: [partnerLocationId], references: [id], onDelete: SetNull)
+
+  /// Период ТО YYYY-MM (только для kind=maintenance)
+  maintenancePeriod   String?
+  /// Замечания / поломки при ТО
+  maintenanceFindings String?
+
+  /// Если ремонт создан переводом с ТО
+  fromMaintenanceRequestId String?
+  fromMaintenanceRequest   Request?  @relation("MaintenanceTransfer", fields: [fromMaintenanceRequestId], references: [id], onDelete: SetNull)
+  repairRequestsFromMaintenance Request[] @relation("MaintenanceTransfer")
 
   companyOrFullName String
   phone             String
@@ -298,6 +418,10 @@ model Request {
   closedAt  DateTime?
   deletedAt DateTime?
 
+  // Opaque share link for customer-facing work completion act
+  actShareTokenHash String?   @unique
+  actShareCreatedAt DateTime?
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -306,25 +430,32 @@ model Request {
   comments    Comment[]
   attachments Attachment[]
   serviceEquipment ServiceEquipment?
+  partUsages   RequestPartUsage[]
 
   @@index([number])
   @@index([status])
   @@index([priority])
+  @@index([kind])
   @@index([clientType])
   @@index([partnerEstablishmentId])
+  @@index([partnerLocationId])
+  @@index([maintenancePeriod])
+  @@index([fromMaintenanceRequestId])
   @@index([deadline])
   @@index([createdAt])
   @@index([deletedAt])
   @@index([status, deadline])
+  @@unique([partnerLocationId, maintenancePeriod, kind])
   @@map("requests")
 }
 
 // many-to-many Request <-> executor User
 model RequestAssignment {
-  id         String   @id @default(cuid())
+  id         String           @id @default(cuid())
   requestId  String
   executorId String
-  assignedAt DateTime @default(now())
+  status     AssignmentStatus @default(accepted)
+  assignedAt DateTime         @default(now())
 
   request  Request @relation(fields: [requestId], references: [id], onDelete: Cascade)
   executor User    @relation(fields: [executorId], references: [id], onDelete: Cascade)
@@ -357,6 +488,8 @@ model ServiceEquipment {
   returnedAt DateTime?
   notes      String?
 
+  attachments ServiceEquipmentAttachment[]
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -364,6 +497,71 @@ model ServiceEquipment {
   @@index([companyOrFullName])
   @@index([partnerEstablishmentId])
   @@map("service_equipment")
+}
+
+model ServiceEquipmentAttachment {
+  id                 String   @id @default(cuid())
+  serviceEquipmentId String
+  uploadedById       String?
+  url                String
+  fileName           String?
+  fileType           String?
+  sizeBytes          Int?
+  createdAt          DateTime @default(now())
+
+  serviceEquipment ServiceEquipment @relation(fields: [serviceEquipmentId], references: [id], onDelete: Cascade)
+  uploadedBy       User?            @relation(fields: [uploadedById], references: [id], onDelete: SetNull)
+
+  @@index([serviceEquipmentId])
+  @@map("service_equipment_attachments")
+}
+
+// ─────────────────────────────────────────────────────────────
+// Warehouse (parts)
+// ─────────────────────────────────────────────────────────────
+
+model Part {
+  id        String      @id @default(cuid())
+  name      String
+  section   PartSection @default(SERVICE)
+  quantity  Int         @default(0)
+  unitPrice Decimal     @db.Decimal(14, 2)
+  isActive  Boolean     @default(true)
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  usages RequestPartUsage[]
+
+  @@unique([section, name])
+  @@index([name])
+  @@index([section])
+  @@index([isActive])
+  @@map("parts")
+}
+
+model RequestPartUsage {
+  id        String @id @default(cuid())
+
+  requestId String
+  request   Request @relation(fields: [requestId], references: [id], onDelete: Cascade)
+
+  partId String?
+  part   Part?   @relation(fields: [partId], references: [id], onDelete: SetNull)
+
+  partNameSnapshot  String
+  unitPriceSnapshot Decimal @db.Decimal(14, 2)
+  quantity          Int
+  lineTotal         Decimal @db.Decimal(14, 2)
+
+  addedById String?
+  addedBy   User?   @relation(fields: [addedById], references: [id], onDelete: SetNull)
+
+  createdAt DateTime @default(now())
+
+  @@index([requestId])
+  @@index([partId])
+  @@index([createdAt])
+  @@map("request_part_usages")
 }
 
 // ─────────────────────────────────────────────────────────────
@@ -384,6 +582,7 @@ model ClosingForm {
 
   incomeAmount  Decimal @default(0) @db.Decimal(14, 2)
   expenseAmount Decimal @default(0) @db.Decimal(14, 2)
+  partsExpenseAmount Decimal @default(0) @db.Decimal(14, 2)
 
   // Always recomputed on the server — never trusted from the client.
   profit           Decimal @default(0) @db.Decimal(14, 2)
@@ -489,6 +688,23 @@ model PushSubscription {
 
   @@index([userId])
   @@map("push_subscriptions")
+}
+
+/// FCM registration token for native / web push (mobile app).
+model DevicePushToken {
+  id        String   @id @default(cuid())
+  userId    String
+  token     String   @unique
+  platform  String // ios | android | web
+  deviceId  String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([deviceId])
+  @@map("device_push_tokens")
 }
 
 // ─────────────────────────────────────────────────────────────

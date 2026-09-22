@@ -28,4 +28,18 @@ export const markReadBodySchema = z.object({
   markAll: z.boolean().default(false),
 });
 
+export const devicePlatformSchema = z.enum(['ios', 'android', 'web']);
+
+export const registerDeviceTokenBodySchema = z.object({
+  token: z.string().min(32).max(4096),
+  platform: devicePlatformSchema,
+  /** Stable device id so a new FCM token replaces the old one on reinstall */
+  deviceId: z.string().min(1).max(256).optional(),
+});
+
+export const unregisterDeviceTokenBodySchema = z.object({
+  token: z.string().min(32).max(4096),
+});
+
 export type NotificationListQuery = z.infer<typeof notificationListQuerySchema>;
+export type RegisterDeviceTokenBody = z.infer<typeof registerDeviceTokenBodySchema>;

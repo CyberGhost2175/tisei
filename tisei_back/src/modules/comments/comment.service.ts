@@ -1,6 +1,7 @@
 import { CommentType } from '@prisma/client';
 import { prisma } from '../../config/prisma.js';
 import { buildPaginated, toSkipTake } from '../../common/utils/pagination.js';
+import { notifyCommentAdded } from '../notifications/notification.service.js';
 import { assertRequestAccess, assertRequestWriteAccess, type AuthContext } from '../requests/request-access.js';
 import type { CommentListQuery } from './comment.schemas.js';
 
@@ -65,6 +66,16 @@ export async function createComment(
     },
     include: { author: { select: { id: true, fullName: true, avatarUrl: true } } },
   });
+
+  const request = await prisma.request.findUnique({
+    where: { id: requestId },
+    select: { id: true, number: true, companyOrFullName: true },
+  });
+  if (request) {
+    void notifyCommentAdded(request, auth.userId, text).catch(() => {
+      /* уведомления не блокируют комментарий */
+    });
+  }
 
   return toDto(comment);
 }

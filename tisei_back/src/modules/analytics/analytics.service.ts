@@ -122,7 +122,7 @@ export async function getDashboard(range: DateRange = {}) {
           : {}),
       },
     }),
-    prisma.user.count({ where: { role: 'executor', isActive: true } }),
+    prisma.user.count({ where: { role: { in: ['executor', 'master'] }, isActive: true } }),
   ]);
 
   const statusMap = Object.fromEntries(byStatus.map((s) => [s.status, s._count]));
@@ -291,7 +291,7 @@ export async function getExecutorKpi(period: ExecutorKpiPeriod, search?: string)
 
   const executors = await prisma.user.findMany({
     where: {
-      role: 'executor',
+      role: { in: ['executor', 'master'] },
       isActive: true,
       ...(search
         ? {
@@ -364,10 +364,10 @@ export async function getExecutorKpi(period: ExecutorKpiPeriod, search?: string)
 /** Детализация КПД мастера: какие заявки взял и закрыл за период. */
 export async function getExecutorKpiDetail(executorId: string, period: ExecutorKpiPeriod) {
   const executor = await prisma.user.findFirst({
-    where: { id: executorId, role: 'executor', isActive: true },
+    where: { id: executorId, role: { in: ['executor', 'master'] }, isActive: true },
     select: { id: true, fullName: true, email: true },
   });
-  if (!executor) throw new NotFoundError('Исполнитель не найден');
+  if (!executor) throw new NotFoundError('Мастер не найден');
 
   const { from, to } = periodRange(period);
 

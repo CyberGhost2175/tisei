@@ -84,14 +84,19 @@ function SidebarContent({
     <>
       <div className="px-gutter mb-stack-lg">
         <div className="flex items-center gap-3">
-          <div className="w-10 h-10 bg-primary rounded-lg flex items-center justify-center text-white">
-            <MSym name="ac_unit" fill />
-          </div>
-          <div>
-            <h1 className="font-display-lg text-headline-sm font-bold text-primary leading-tight">
-              TiSei CRM
+          <img
+            src="/bereke-mark.png"
+            alt="Береке ТехСервис"
+            className="w-10 h-10 rounded-lg object-cover shrink-0"
+          />
+          <div className="min-w-0">
+            <h1 className="font-display-lg text-[15px] font-bold text-primary leading-tight tracking-tight">
+              Береке
             </h1>
-            <p className="text-label-md text-on-surface-variant tracking-wider uppercase">
+            <p className="text-[11px] font-semibold text-primary/80 leading-tight">
+              ТехСервис CRM
+            </p>
+            <p className="text-[10px] text-on-surface-variant tracking-wider uppercase mt-0.5">
               Сервисное управление
             </p>
           </div>

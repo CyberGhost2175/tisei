@@ -12,8 +12,11 @@ export function assertClosingFormComplete(body: UpsertClosingFormBody): void {
   if (body.incomeAmount <= 0) {
     throw new BadRequestError('Укажите сумму прихода больше 0');
   }
-  if (body.expenseAmount < 0) {
+  if (body.expenseAmount !== undefined && body.expenseAmount < 0) {
     throw new BadRequestError('Расход не может быть отрицательным');
+  }
+  if (body.additionalExpenseAmount !== undefined && body.additionalExpenseAmount < 0) {
+    throw new BadRequestError('Дополнительный расход не может быть отрицательным');
   }
 }
 

@@ -2,9 +2,9 @@ import type { Metadata } from "next";
 import Link from "next/link";
 
 export const metadata: Metadata = {
-  title: "Политика конфиденциальности — TiSei",
+  title: "Политика конфиденциальности — Береке ТехСервис",
   description:
-    "Политика конфиденциальности и обработки персональных данных сервиса TiSei.",
+    "Политика конфиденциальности и обработки персональных данных сервиса Береке ТехСервис.",
 };
 
 const UPDATED = "6 июля 2026 г.";
@@ -16,7 +16,7 @@ export default function PrivacyPage() {
       <header className="sticky top-0 z-50 bg-primary h-20 flex items-center border-b border-outline-variant/20">
         <div className="flex justify-between items-center w-full px-5 md:px-lg lg:px-xl max-w-[1000px] mx-auto">
           <Link href="/" className="flex items-center gap-base">
-            <img alt="TiSei" className="h-10 w-auto" src="/tisei-logo.png" />
+            <img alt="Береке ТехСервис" className="h-10 w-auto" src="/bereke-logo.png" />
           </Link>
           <Link
             href="/"
@@ -45,8 +45,8 @@ export default function PrivacyPage() {
             <p>
               Настоящая Политика конфиденциальности (далее — «Политика») определяет
               порядок обработки и защиты персональных данных пользователей сайта
-              TiSei (далее — «Сайт»), оператором которого является ИП «TiSei
-              Service» (далее — «Компания», «мы»). Используя Сайт и оставляя заявку,
+              Береке ТехСервис (далее — «Сайт»), оператором которого является ИП «Береке
+              ТехСервис» (далее — «Компания», «мы»). Используя Сайт и оставляя заявку,
               вы подтверждаете согласие с условиями настоящей Политики.
             </p>
           </section>
@@ -173,7 +173,7 @@ export default function PrivacyPage() {
             </h2>
             <p>По вопросам обработки персональных данных обращайтесь:</p>
             <ul className="space-y-xs">
-              <li>Компания: ИП «TiSei Service»</li>
+              <li>Компания: ИП «Береке ТехСервис»</li>
               <li>
                 Телефон:{" "}
                 <a
@@ -212,7 +212,7 @@ export default function PrivacyPage() {
       <footer className="bg-primary text-on-primary/60 border-t border-outline-variant/20 py-lg">
         <div className="max-w-[1000px] mx-auto px-5 md:px-lg lg:px-xl">
           <p className="font-mono-data text-xs">
-            © 2024 TiSei. Все права защищены. Казахстан.
+            © 2024 Береке ТехСервис. Все права защищены. Казахстан.
           </p>
         </div>
       </footer>

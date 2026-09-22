@@ -1,15 +1,15 @@
 import { RequestPriority } from '@prisma/client';
 import { findMatchingPartner, getPartnerById } from './partner-match.js';
 
-/** Все новые заявки — обычный приоритет; менеджер меняет вручную. */
+/** Новые заявки без приоритета — менеджер выставляет P1–P4 вручную. */
 export async function resolveRequestPriority(input: {
-  requestedPriority?: RequestPriority;
-  existingPriority?: RequestPriority;
+  requestedPriority?: RequestPriority | null;
+  existingPriority?: RequestPriority | null;
   isCreate?: boolean;
-}): Promise<RequestPriority> {
-  if (input.isCreate) return RequestPriority.normal;
+}): Promise<RequestPriority | null> {
+  if (input.isCreate) return null;
   if (input.requestedPriority !== undefined) return input.requestedPriority;
-  return input.existingPriority ?? RequestPriority.normal;
+  return input.existingPriority ?? null;
 }
 
 export async function resolvePartnerLink(input: {

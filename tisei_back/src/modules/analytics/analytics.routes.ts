@@ -57,7 +57,7 @@ export async function analyticsRoutes(app: FastifyInstance): Promise<void> {
     },
     async (request) => {
       const auth = request.authUser!;
-      if (auth.role === 'executor') {
+      if (auth.role === 'executor' || auth.role === 'master') {
         return getExecutorDashboard(auth.id);
       }
       return getDashboard(request.query);
@@ -141,7 +141,7 @@ export async function analyticsRoutes(app: FastifyInstance): Promise<void> {
                 companyOrFullName: z.string(),
                 address: z.string().nullable(),
                 status: z.string(),
-                priority: z.string(),
+                priority: z.string().nullable(),
                 assignedAt: z.string(),
               }),
             ),
@@ -152,7 +152,7 @@ export async function analyticsRoutes(app: FastifyInstance): Promise<void> {
                 companyOrFullName: z.string(),
                 address: z.string().nullable(),
                 status: z.string(),
-                priority: z.string(),
+                priority: z.string().nullable(),
                 workPerformed: z.string().nullable(),
                 incomeAmount: z.number(),
                 expenseAmount: z.number(),

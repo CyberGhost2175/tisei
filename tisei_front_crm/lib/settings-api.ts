@@ -16,3 +16,14 @@ export function updateUserSettings(body: Partial<UserSettings>) {
     body: JSON.stringify(body),
   });
 }
+
+export function changePassword(body: {
+  currentPassword: string;
+  newPassword: string;
+  confirmPassword: string;
+}) {
+  return apiFetch<{ message: string }>("/auth/change-password", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}

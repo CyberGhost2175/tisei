@@ -100,20 +100,31 @@ export function YandexRouteMap({
             [p.latitude, p.longitude],
             {
               balloonContentHeader: `<strong>#${i + 1} · ${p.number}</strong>${isPartner ? " · Партнёр" : ""}`,
-              balloonContentBody: `<div style="max-width:240px"><b>${p.companyOrFullName}</b><br/>${p.address || "—"}</div>`,
+              balloonContentBody: `<div style="max-width:280px;line-height:1.45;font-size:13px">
+                <div><b>Место / компания</b><br/>${p.companyOrFullName}</div>
+                <div style="margin-top:6px"><b>Адрес</b><br/>${p.address || "—"}</div>
+              </div>`,
               hintContent: `#${i + 1} ${p.companyOrFullName}`,
             },
             {
               preset: isActive
                 ? "islands#redCircleDotIconWithCaption"
                 : isPartner
-                  ? "islands#orangeCircleDotIconWithCaption"
+                  ? "islands#lightBlueCircleDotIconWithCaption"
                   : "islands#blueCircleDotIconWithCaption",
-              iconColor: isActive ? "#ba1a1a" : isPartner ? "#e65100" : "#00626a",
+              iconColor: isActive ? "#ba1a1a" : isPartner ? "#4fc3f7" : "#00626a",
               iconCaption: String(i + 1),
+              openBalloonOnClick: true,
             },
           );
-          placemark.events.add("click", () => onSelectPointRef.current?.(i));
+          placemark.events.add("click", () => {
+            onSelectPointRef.current?.(i);
+            try {
+              placemark.balloon?.open();
+            } catch {
+              /* ignore */
+            }
+          });
           map.geoObjects.add(placemark);
         });
 

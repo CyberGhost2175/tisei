@@ -22,7 +22,8 @@ type RoleFilter = "all" | UserRole;
 
 const ROLE_TABS: { key: RoleFilter; label: string }[] = [
   { key: "all", label: "Все" },
-  { key: "executor", label: "Мастера" },
+  { key: "executor", label: "Штатные мастера" },
+  { key: "master", label: "Мастера" },
   { key: "manager", label: "Менеджеры" },
   { key: "admin", label: "Админы" },
 ];
@@ -210,7 +211,7 @@ export default function UsersPage() {
         </div>
 
         <div className="mb-6 grid md:grid-cols-3 gap-3">
-          {(["admin", "manager", "executor"] as UserRole[]).map((role) => (
+          {(["admin", "manager", "executor", "master"] as UserRole[]).map((role) => (
             <div
               key={role}
               className="p-4 rounded-xl border border-outline-variant bg-surface-container-lowest"
@@ -293,7 +294,8 @@ export default function UsersPage() {
                 value={form.role}
                 onChange={(e) => setForm({ ...form, role: e.target.value as UserRole })}
               >
-                <option value="executor">Исполнитель (мастер)</option>
+                <option value="executor">Штатный мастер</option>
+                <option value="master">Мастер</option>
                 <option value="manager">Менеджер</option>
                 <option value="admin">Администратор</option>
               </select>
@@ -401,6 +403,13 @@ export default function UsersPage() {
           <button
             type="button"
             onClick={() => openCreate("executor")}
+            className="text-sm text-primary hover:underline"
+          >
+            + Добавить штатного мастера
+          </button>
+          <button
+            type="button"
+            onClick={() => openCreate("master")}
             className="text-sm text-primary hover:underline"
           >
             + Добавить мастера

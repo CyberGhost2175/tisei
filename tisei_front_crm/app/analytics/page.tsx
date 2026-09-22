@@ -9,6 +9,7 @@ import { useAuth, useRequireAuth } from "@/lib/AuthProvider";
 import { useGlobalSearch } from "@/lib/global-search";
 import { matchesSearch } from "@/lib/search-utils";
 import type { AnalyticsReport, DashboardKpi } from "@/lib/types";
+import { priorityLabel, statusLabel } from "@/lib/labels";
 import { ApiError } from "@/lib/api";
 
 import { useRouter } from "next/navigation";
@@ -32,7 +33,7 @@ export default function AnalyticsPage() {
   const { debouncedQuery } = useGlobalSearch();
 
   useEffect(() => {
-    if (user?.role === "executor") router.replace("/");
+    if (user?.role === "executor" || user?.role === "master") router.replace("/");
   }, [user, router]);
 
   const [period, setPeriod] = useState<Period>("month");
@@ -70,7 +71,9 @@ export default function AnalyticsPage() {
 
   const statusRows = useMemo(() => {
     const rows = (statusReport?.rows ?? []) as Array<{ status: string; count: number }>;
-    return rows.filter((r) => matchesSearch(debouncedQuery, r.status, String(r.count)));
+    return rows.filter((r) =>
+      matchesSearch(debouncedQuery, r.status, statusLabel(r.status), String(r.count)),
+    );
   }, [statusReport, debouncedQuery]);
   const executorRows = useMemo(() => {
     const rows = (executorReport?.rows ?? []) as Array<{ executorName: string; count: number }>;
@@ -85,7 +88,15 @@ export default function AnalyticsPage() {
       status: string;
     }>;
     return rows.filter((r) =>
-      matchesSearch(debouncedQuery, r.number, r.companyOrFullName, r.priority, r.status),
+      matchesSearch(
+        debouncedQuery,
+        r.number,
+        r.companyOrFullName,
+        r.priority,
+        priorityLabel(r.priority),
+        r.status,
+        statusLabel(r.status),
+      ),
     );
   }, [overdueReport, debouncedQuery]);
   const maxStatus = Math.max(...statusRows.map((r) => Number(r.count || 0)), 1);
@@ -117,7 +128,9 @@ export default function AnalyticsPage() {
                       {b.count}
                     </div>
                   </div>
-                  <span className="text-[10px] text-on-surface-variant font-mono-data text-center">{b.status}</span>
+                  <span className="text-[10px] text-on-surface-variant font-mono-data text-center leading-tight">
+                    {statusLabel(b.status)}
+                  </span>
                 </div>
               ))}
               {!loading && statusRows.length === 0 && <p className="text-on-surface-variant">Нет данных</p>}
@@ -176,7 +189,8 @@ export default function AnalyticsPage() {
                       <p className="text-body-sm text-on-surface-variant">{row.companyOrFullName}</p>
                     </div>
                     <div className="text-right text-body-sm">
-                      <p>{row.priority}</p>
+                      <p>{priorityLabel(row.priority)}</p>
+                      <p className="text-on-surface-variant text-[11px]">{statusLabel(row.status)}</p>
                       <p className="text-on-surface-variant">{row.deadline ? new Date(row.deadline).toLocaleDateString("ru-RU") : "—"}</p>
                     </div>
                   </div>

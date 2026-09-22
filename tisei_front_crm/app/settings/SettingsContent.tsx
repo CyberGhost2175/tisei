@@ -12,6 +12,7 @@ import {
   updateNotificationPreferences,
   type NotificationPreference,
 } from "@/lib/notifications-api";
+import { changePassword } from "@/lib/settings-api";
 import { ApiError } from "@/lib/api";
 
 const THEME_OPTIONS: { value: ThemeMode; label: string; icon: string }[] = [
@@ -19,6 +20,9 @@ const THEME_OPTIONS: { value: ThemeMode; label: string; icon: string }[] = [
   { value: "dark", label: "Тёмная", icon: "dark_mode" },
   { value: "system", label: "Как в системе", icon: "brightness_auto" },
 ];
+
+const INPUT =
+  "w-full bg-surface-container-low border border-outline-variant rounded-lg px-4 py-2.5 text-body-sm";
 
 export function SettingsContent() {
   useRequireAuth();
@@ -30,6 +34,13 @@ export function SettingsContent() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+
+  const [currentPassword, setCurrentPassword] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [passwordSaving, setPasswordSaving] = useState(false);
+  const [passwordError, setPasswordError] = useState("");
+  const [passwordSuccess, setPasswordSuccess] = useState("");
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -69,13 +80,46 @@ export function SettingsContent() {
     }
   };
 
+  const onChangePassword = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setPasswordError("");
+    setPasswordSuccess("");
+
+    if (newPassword.length < 8) {
+      setPasswordError("Новый пароль должен содержать минимум 8 символов");
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setPasswordError("Пароли не совпадают");
+      return;
+    }
+    if (currentPassword === newPassword) {
+      setPasswordError("Новый пароль должен отличаться от текущего");
+      return;
+    }
+
+    setPasswordSaving(true);
+    try {
+      await changePassword({ currentPassword, newPassword, confirmPassword });
+      setPasswordSuccess("Пароль успешно изменён");
+      setCurrentPassword("");
+      setNewPassword("");
+      setConfirmPassword("");
+      setTimeout(() => setPasswordSuccess(""), 3500);
+    } catch (err) {
+      setPasswordError(err instanceof ApiError ? err.message : "Не удалось изменить пароль");
+    } finally {
+      setPasswordSaving(false);
+    }
+  };
+
   return (
     <AppShell active="settings" mobileActive="profile" searchPlaceholder="Настройки...">
       <div className="max-w-2xl mx-auto space-y-6">
         <div>
           <h1 className="font-headline-md text-headline-md">Настройки</h1>
           <p className="text-body-sm text-on-surface-variant mt-1">
-            {user?.fullName} · оформление и уведомления
+            {user?.fullName} · оформление, безопасность и уведомления
           </p>
         </div>
 
@@ -86,6 +130,74 @@ export function SettingsContent() {
             {success}
           </p>
         )}
+
+        <section className="bg-surface-container-lowest border border-outline-variant rounded-xl p-6">
+          <h2 className="font-headline-sm text-headline-sm mb-1">Смена пароля</h2>
+          <p className="text-body-sm text-on-surface-variant mb-4">
+            Любой пользователь может сменить свой пароль. Укажите текущий и новый пароль (не менее 8
+            символов).
+          </p>
+
+          {passwordError && <p className="text-error text-body-sm mb-3">{passwordError}</p>}
+          {passwordSuccess && (
+            <p className="text-primary text-body-sm mb-3 flex items-center gap-2">
+              <MSym name="check_circle" className="text-[18px]" />
+              {passwordSuccess}
+            </p>
+          )}
+
+          <form onSubmit={(e) => void onChangePassword(e)} className="space-y-3">
+            <div>
+              <label className="block text-label-md text-on-surface-variant mb-1">
+                Текущий пароль
+              </label>
+              <input
+                className={INPUT}
+                type="password"
+                autoComplete="current-password"
+                value={currentPassword}
+                onChange={(e) => setCurrentPassword(e.target.value)}
+                required
+                disabled={passwordSaving}
+              />
+            </div>
+            <div>
+              <label className="block text-label-md text-on-surface-variant mb-1">Новый пароль</label>
+              <input
+                className={INPUT}
+                type="password"
+                autoComplete="new-password"
+                value={newPassword}
+                onChange={(e) => setNewPassword(e.target.value)}
+                required
+                minLength={8}
+                disabled={passwordSaving}
+              />
+            </div>
+            <div>
+              <label className="block text-label-md text-on-surface-variant mb-1">
+                Повторите новый пароль
+              </label>
+              <input
+                className={INPUT}
+                type="password"
+                autoComplete="new-password"
+                value={confirmPassword}
+                onChange={(e) => setConfirmPassword(e.target.value)}
+                required
+                minLength={8}
+                disabled={passwordSaving}
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={passwordSaving || !currentPassword || !newPassword || !confirmPassword}
+              className="px-4 py-2.5 bg-primary text-on-primary rounded-lg font-label-md disabled:opacity-50"
+            >
+              {passwordSaving ? "Сохранение..." : "Изменить пароль"}
+            </button>
+          </form>
+        </section>
 
         <section className="bg-surface-container-lowest border border-outline-variant rounded-xl p-6">
           <h2 className="font-headline-sm text-headline-sm mb-1">Оформление</h2>
@@ -125,37 +237,37 @@ export function SettingsContent() {
               {preferences
                 .filter((pref) => matchesSearch(debouncedQuery, pref.label, pref.eventType))
                 .map((pref) => (
-                <li key={pref.eventType} className="py-4 flex items-center justify-between gap-4">
-                  <div className="min-w-0">
-                    <p className="font-body-md font-medium">{pref.label}</p>
-                    {pref.eventType === "request.created" && (
-                      <p className="text-body-sm text-on-surface-variant mt-0.5">
-                        Тост при новой заявке на любом экране
-                      </p>
-                    )}
-                  </div>
-                  <button
-                    type="button"
-                    disabled={saving}
-                    role="switch"
-                    aria-checked={pref.isEnabled}
-                    onClick={() => void togglePreference(pref.eventType, !pref.isEnabled)}
-                    className={
-                      pref.isEnabled
-                        ? "relative w-12 h-7 rounded-full bg-primary transition-colors shrink-0"
-                        : "relative w-12 h-7 rounded-full bg-outline-variant transition-colors shrink-0"
-                    }
-                  >
-                    <span
+                  <li key={pref.eventType} className="py-4 flex items-center justify-between gap-4">
+                    <div className="min-w-0">
+                      <p className="font-body-md font-medium">{pref.label}</p>
+                      {pref.eventType === "request.created" && (
+                        <p className="text-body-sm text-on-surface-variant mt-0.5">
+                          Тост при новой заявке на любом экране
+                        </p>
+                      )}
+                    </div>
+                    <button
+                      type="button"
+                      disabled={saving}
+                      role="switch"
+                      aria-checked={pref.isEnabled}
+                      onClick={() => void togglePreference(pref.eventType, !pref.isEnabled)}
                       className={
                         pref.isEnabled
-                          ? "absolute top-1 left-6 w-5 h-5 rounded-full bg-on-primary shadow transition-all"
-                          : "absolute top-1 left-1 w-5 h-5 rounded-full bg-surface-container-lowest shadow transition-all"
+                          ? "relative w-12 h-7 rounded-full bg-primary transition-colors shrink-0"
+                          : "relative w-12 h-7 rounded-full bg-outline-variant transition-colors shrink-0"
                       }
-                    />
-                  </button>
-                </li>
-              ))}
+                    >
+                      <span
+                        className={
+                          pref.isEnabled
+                            ? "absolute top-1 left-6 w-5 h-5 rounded-full bg-on-primary shadow transition-all"
+                            : "absolute top-1 left-1 w-5 h-5 rounded-full bg-surface-container-lowest shadow transition-all"
+                        }
+                      />
+                    </button>
+                  </li>
+                ))}
             </ul>
           )}
         </section>

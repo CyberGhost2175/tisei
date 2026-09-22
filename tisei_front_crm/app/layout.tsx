@@ -19,9 +19,9 @@ const ibmMono = IBM_Plex_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "TiSei CRM — Сервисное управление",
+  title: "Береке ТехСервис CRM — Сервисное управление",
   description:
-    "CRM для управления сервисными операциями TiSei: заявки, карта маршрутов, аналитика и рабочее место мастера.",
+    "CRM для управления сервисными операциями Береке ТехСервис: заявки, карта маршрутов, аналитика и рабочее место мастера.",
   icons: {
     icon: [{ url: "/favicon.ico" }, { url: "/icon.png", type: "image/png", sizes: "32x32" }],
     apple: "/apple-icon.png",

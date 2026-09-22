@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { cuidSchema, emailSchema, phoneSchema } from '../../common/validation/common.schemas.js';
 import { paginationSchema } from '../../common/utils/pagination.js';
 
-export const userRoleSchema = z.enum(['manager', 'executor', 'admin']);
+export const userRoleSchema = z.enum(['manager', 'executor', 'master', 'admin']);
 
 export const userListQuerySchema = paginationSchema.extend({
   role: userRoleSchema.optional(),

@@ -15,15 +15,15 @@ import { matchesSearch } from "@/lib/search-utils";
 import type { DictionaryItem, DictionaryType } from "@/lib/types";
 import { ApiError } from "@/lib/api";
 import { PartnersTab } from "./PartnersTab";
-import { ServiceEquipmentTab } from "./ServiceEquipmentTab";
+import { RepairActsTab } from "./RepairActsTab";
 
-type PageTab = DictionaryType | "partners" | "in-service";
+type PageTab = DictionaryType | "partners" | "repair-acts";
 
 const TABS: { key: PageTab; label: string }[] = [
   { key: "equipment-categories", label: "Категории оборудования" },
   { key: "malfunction-types", label: "Типы неисправностей" },
-  { key: "in-service", label: "В сервисе" },
   { key: "partners", label: "Партнёры-заведения" },
+  { key: "repair-acts", label: "АВР ремонт" },
 ];
 
 export default function DictionariesPage() {
@@ -42,7 +42,7 @@ export default function DictionariesPage() {
   const [alert, setAlert] = useState<{ title: string; description: string } | null>(null);
 
   const load = useCallback(async () => {
-    if (tab === "partners" || tab === "in-service") return;
+    if (tab === "partners" || tab === "repair-acts") return;
     setLoading(true);
     setError("");
     try {
@@ -61,7 +61,7 @@ export default function DictionariesPage() {
 
   const onAdd = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (tab === "partners" || tab === "in-service") return;
+    if (tab === "partners" || tab === "repair-acts") return;
     const name = newName.trim();
     if (!name) return;
     setSaving(true);
@@ -80,7 +80,7 @@ export default function DictionariesPage() {
   };
 
   const onToggle = async (item: DictionaryItem) => {
-    if (tab === "partners" || tab === "in-service") return;
+    if (tab === "partners" || tab === "repair-acts") return;
     try {
       await updateDictionaryEntry(tab, item.id, { isActive: !item.isActive });
       void load();
@@ -93,7 +93,7 @@ export default function DictionariesPage() {
   };
 
   const onDelete = async () => {
-    if (!deleteId || tab === "partners" || tab === "in-service") return;
+    if (!deleteId || tab === "partners" || tab === "repair-acts") return;
     setDeleting(true);
     try {
       await deleteDictionaryEntry(tab, deleteId);
@@ -109,7 +109,7 @@ export default function DictionariesPage() {
     }
   };
 
-  if (user?.role === "executor") {
+  if (user?.role === "executor" || user?.role === "master") {
     return (
       <AppShell active="refs" mobileActive="profile" searchPlaceholder="Поиск...">
         <p className="text-error">Раздел недоступен для исполнителей</p>
@@ -123,7 +123,7 @@ export default function DictionariesPage() {
       <div className="mb-6">
         <h2 className="font-headline-md text-headline-md">Справочники</h2>
         <p className="text-body-sm text-on-surface-variant">
-          Категории, неисправности, оборудование в сервисе и партнёры
+          Категории оборудования, типы неисправностей, партнёры и АВР ремонта
         </p>
       </div>
 
@@ -144,12 +144,14 @@ export default function DictionariesPage() {
         ))}
       </div>
 
-      {error && tab !== "partners" && <p className="text-error text-body-sm mb-4">{error}</p>}
+      {error && tab !== "partners" && tab !== "repair-acts" && (
+        <p className="text-error text-body-sm mb-4">{error}</p>
+      )}
 
       {tab === "partners" ? (
         <PartnersTab isAdmin={isAdmin} searchQuery={debouncedQuery} />
-      ) : tab === "in-service" ? (
-        <ServiceEquipmentTab isAdmin={isAdmin} searchQuery={debouncedQuery} />
+      ) : tab === "repair-acts" ? (
+        <RepairActsTab searchQuery={debouncedQuery} />
       ) : (
         <>
       {isAdmin && (
@@ -239,3 +241,4 @@ export default function DictionariesPage() {
     </>
   );
 }
+

@@ -32,7 +32,7 @@ const userResponseSchema = z.object({
   fullName: z.string(),
   email: z.string(),
   phone: z.string().nullable(),
-  role: z.enum(['manager', 'executor', 'admin']),
+  role: z.enum(['manager', 'executor', 'master', 'admin']),
   specialization: z.array(z.string()),
   avatarUrl: z.string().nullable(),
   is2faEnabled: z.boolean(),

@@ -123,6 +123,16 @@ export function RequestForm() {
       <h2 className="text-primary font-headline-lg text-headline-lg mb-md">
         Подать заявку на ремонт
       </h2>
+      <aside
+        className="mb-md rounded-[4px] border border-error/40 bg-error-container/15 px-md py-sm text-on-surface"
+        role="note"
+      >
+        <p className="font-label-md text-label-md text-error mb-xs">Важно</p>
+        <p className="font-body-md text-body-md text-on-surface-variant">
+          Если оплата за работу была произведена наличным расчётом мастеру, компания гарантии на
+          оказанные услуги не даёт.
+        </p>
+      </aside>
       <form className="space-y-md" onSubmit={handleSubmit}>
         <div className="grid grid-cols-1 md:grid-cols-2 gap-md">
           <div>

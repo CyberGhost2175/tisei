@@ -83,3 +83,23 @@ void (async () => {
 
 setInterval(() => void handleOverdueCheck(), 60 * 60 * 1000);
 setInterval(() => void handleDeadlineReminders(), 60 * 60 * 1000);
+
+/** Ежедневно: создать заявки ТО на текущий месяц (идемпотентно). */
+async function handleMaintenanceEnsure(): Promise<void> {
+  try {
+    const { ensureMaintenancePeriod, currentPeriod } = await import(
+      '../modules/maintenance/maintenance.service.js'
+    );
+    const result = await ensureMaintenancePeriod(currentPeriod());
+    if (result.created > 0) {
+      console.info(
+        `[worker:maintenance] created ${result.created} TO requests for ${result.period}`,
+      );
+    }
+  } catch (e) {
+    console.error('[worker:maintenance] failed', e);
+  }
+}
+
+setInterval(() => void handleMaintenanceEnsure(), 6 * 60 * 60 * 1000);
+void handleMaintenanceEnsure();

@@ -11,6 +11,8 @@ import {
   changeStatusBodySchema,
   assignExecutorsBodySchema,
   freezeRequestBodySchema,
+  bulkDeleteRequestsBodySchema,
+  bulkDeleteRequestsResponseSchema,
 } from './request.schemas.js';
 import {
   listRequests,
@@ -20,8 +22,11 @@ import {
   changeRequestStatus,
   assignExecutors,
   claimRequest,
+  acceptRequestOffer,
+  declineRequest,
   freezeRequest,
   softDeleteRequest,
+  softDeleteRequests,
   restoreRequest,
   duplicateRequest,
 } from './request.service.js';
@@ -47,22 +52,6 @@ export async function requestRoutes(app: FastifyInstance): Promise<void> {
     },
   );
 
-  r.get(
-    '/:id',
-    {
-      preHandler: [authenticate],
-      schema: {
-        tags: ['Requests'],
-        summary: 'Получить заявку по ID',
-        params: requestIdParamSchema,
-      },
-    },
-    async (request) => {
-      const auth = request.authUser!;
-      return getRequestById(request.params.id, { userId: auth.id, role: auth.role });
-    },
-  );
-
   r.post(
     '/',
     {
@@ -76,6 +65,45 @@ export async function requestRoutes(app: FastifyInstance): Promise<void> {
     async (request) => {
       const auth = request.authUser!;
       return createRequest(request.body, { userId: auth.id, role: auth.role }, RequestSource.manual);
+    },
+  );
+
+  r.post(
+    '/bulk-delete',
+    {
+      preHandler: [authenticate, requireRole(['manager', 'admin'])],
+      schema: {
+        tags: ['Requests'],
+        summary: 'Массовое мягкое удаление заявок',
+        body: bulkDeleteRequestsBodySchema,
+        response: {
+          200: bulkDeleteRequestsResponseSchema,
+        },
+      },
+    },
+    async (request) => {
+      const auth = request.authUser!;
+      const result = await softDeleteRequests(request.body.ids, {
+        userId: auth.id,
+        role: auth.role,
+      });
+      return { message: `Удалено заявок: ${result.deleted}`, deleted: result.deleted };
+    },
+  );
+
+  r.get(
+    '/:id',
+    {
+      preHandler: [authenticate],
+      schema: {
+        tags: ['Requests'],
+        summary: 'Получить заявку по ID',
+        params: requestIdParamSchema,
+      },
+    },
+    async (request) => {
+      const auth = request.authUser!;
+      return getRequestById(request.params.id, { userId: auth.id, role: auth.role });
     },
   );
 
@@ -147,13 +175,45 @@ export async function requestRoutes(app: FastifyInstance): Promise<void> {
       preHandler: [authenticate, requireRole(['executor'])],
       schema: {
         tags: ['Requests'],
-        summary: 'Исполнитель берёт заявку в работу',
+        summary: 'Штатный мастер берёт заявку в работу',
         params: requestIdParamSchema,
       },
     },
     async (request) => {
       const auth = request.authUser!;
       return claimRequest(request.params.id, { userId: auth.id, role: auth.role });
+    },
+  );
+
+  r.post(
+    '/:id/accept',
+    {
+      preHandler: [authenticate, requireRole(['executor', 'master'])],
+      schema: {
+        tags: ['Requests'],
+        summary: 'Мастер принимает предложенную заявку',
+        params: requestIdParamSchema,
+      },
+    },
+    async (request) => {
+      const auth = request.authUser!;
+      return acceptRequestOffer(request.params.id, { userId: auth.id, role: auth.role });
+    },
+  );
+
+  r.post(
+    '/:id/decline',
+    {
+      preHandler: [authenticate, requireRole(['executor', 'master'])],
+      schema: {
+        tags: ['Requests'],
+        summary: 'Мастер отказывается от заявки — статус «Новая»',
+        params: requestIdParamSchema,
+      },
+    },
+    async (request) => {
+      const auth = request.authUser!;
+      return declineRequest(request.params.id, { userId: auth.id, role: auth.role });
     },
   );
 

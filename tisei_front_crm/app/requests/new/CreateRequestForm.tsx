@@ -14,7 +14,7 @@ import { PRIORITY_LABELS } from "@/lib/labels";
 import type { DictionaryItem, RequestPriority } from "@/lib/types";
 import { ApiError } from "@/lib/api";
 
-const PRIORITIES: RequestPriority[] = ["critical", "high", "normal", "low"];
+const PRIORITIES: RequestPriority[] = ["P1", "P2", "P3", "P4"];
 const INPUT_CLS =
   "w-full bg-surface-container-low border border-outline-variant rounded-lg px-3 py-2 focus:ring-2 focus:ring-primary-container";
 
@@ -36,7 +36,7 @@ export function CreateRequestForm() {
   const [malfunctionTypeId, setMalfunctionTypeId] = useState("");
   const [malfunctionCustomText, setMalfunctionCustomText] = useState("");
   const [problemDescription, setProblemDescription] = useState("");
-  const [priority, setPriority] = useState<RequestPriority>("normal");
+  const [priority, setPriority] = useState<RequestPriority | "">("");
   const [partnerId, setPartnerId] = useState("");
   const [partners, setPartners] = useState<{ id: string; name: string }[]>([]);
 
@@ -75,7 +75,7 @@ export function CreateRequestForm() {
         malfunctionTypeId: malfunctionTypeId || undefined,
         malfunctionCustomText: malfunctionCustomText || undefined,
         problemDescription: problemDescription || undefined,
-        priority,
+        priority: priority || undefined,
         partnerEstablishmentId: partnerId || undefined,
         clientType: "serviced",
       });
@@ -207,8 +207,11 @@ export function CreateRequestForm() {
               <select
                 className={INPUT_CLS}
                 value={priority}
-                onChange={(e) => setPriority(e.target.value as RequestPriority)}
+                onChange={(e) =>
+                  setPriority(e.target.value as RequestPriority | "")
+                }
               >
+                <option value="">Не задан</option>
                 {PRIORITIES.map((p) => (
                   <option key={p} value={p}>
                     {PRIORITY_LABELS[p]}

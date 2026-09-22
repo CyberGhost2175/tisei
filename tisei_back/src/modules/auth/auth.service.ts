@@ -1,7 +1,7 @@
 import jwt from 'jsonwebtoken';
 import type { FastifyReply } from 'fastify';
 import { prisma } from '../../config/prisma.js';
-import { env } from '../../config/env.js';
+import { env, isCookieSecure } from '../../config/env.js';
 import {
   UnauthorizedError,
   BadRequestError,
@@ -9,6 +9,7 @@ import {
 import { hashPassword, verifyPassword, generateOpaqueToken, sha256 } from '../../common/utils/crypto.js';
 import { signAccessToken, signRefreshToken, verifyRefreshToken } from '../../common/utils/jwt.js';
 import { getEmailProvider } from '../../common/email/email.factory.js';
+import { writeAuditLog } from '../audit/audit.service.js';
 import { verifyTotpCode, generateTotpSecret, generateTotpQrDataUrl } from './totp.service.js';
 import type { LoginBody, Verify2faBody } from './auth.schemas.js';
 
@@ -19,7 +20,7 @@ export interface AuthUserDto {
   id: string;
   email: string;
   fullName: string;
-  role: 'manager' | 'executor' | 'admin';
+  role: 'manager' | 'executor' | 'master' | 'admin';
   is2faEnabled: boolean;
 }
 
@@ -99,7 +100,7 @@ async function createSession(
 export function setRefreshCookie(reply: FastifyReply, token: string): void {
   reply.setCookie(REFRESH_COOKIE, token, {
     httpOnly: true,
-    secure: env.NODE_ENV === 'production',
+    secure: isCookieSecure,
     sameSite: 'lax',
     path: '/api/v1/auth',
     maxAge: parseDurationToMs(env.JWT_REFRESH_TTL) / 1000,
@@ -252,7 +253,7 @@ export async function requestPasswordReset(email: string): Promise<void> {
   const resetUrl = `${env.FRONTEND_CRM_URL}/reset-password?token=${rawToken}`;
   await getEmailProvider().send({
     to: user.email,
-    subject: 'Сброс пароля TiSei CRM',
+    subject: 'Сброс пароля Береке ТехСервис CRM',
     html: `<p>Для сброса пароля перейдите по ссылке (действует ${env.PASSWORD_RESET_TTL_MINUTES} мин.):</p><p><a href="${resetUrl}">${resetUrl}</a></p>`,
     text: `Сброс пароля: ${resetUrl}`,
   });
@@ -278,6 +279,34 @@ export async function confirmPasswordReset(token: string, newPassword: string): 
       data: { revokedAt: new Date() },
     }),
   ]);
+}
+
+export async function changePassword(
+  userId: string,
+  currentPassword: string,
+  newPassword: string,
+): Promise<{ message: string }> {
+  const user = await prisma.user.findUnique({ where: { id: userId } });
+  if (!user || !user.isActive) {
+    throw new UnauthorizedError('Пользователь не найден');
+  }
+
+  const valid = await verifyPassword(user.passwordHash, currentPassword);
+  if (!valid) {
+    throw new UnauthorizedError('Неверный текущий пароль');
+  }
+
+  const passwordHash = await hashPassword(newPassword);
+  await prisma.user.update({ where: { id: userId }, data: { passwordHash } });
+
+  await writeAuditLog({
+    userId,
+    action: 'auth.change_password',
+    entityType: 'User',
+    entityId: userId,
+  });
+
+  return { message: 'Пароль успешно изменён' };
 }
 
 export async function setup2fa(userId: string) {

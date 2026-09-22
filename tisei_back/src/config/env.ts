@@ -23,10 +23,17 @@ const envSchema = z.object({
   JWT_REFRESH_TTL: z.string().default('7d'),
   SESSION_IDLE_MINUTES: z.coerce.number().int().positive().default(480),
   PASSWORD_RESET_TTL_MINUTES: z.coerce.number().int().positive().default(60),
-  TOTP_ISSUER: z.string().default('TiSei CRM'),
+  TOTP_ISSUER: z.string().default('Береке ТехСервис CRM'),
 
   FRONTEND_CRM_URL: z.string().url().default('http://localhost:3000'),
   FRONTEND_LANDING_URL: z.string().url().default('http://localhost:3001'),
+  /** Extra CORS origins, comma-separated (e.g. http://87.199.130.251). */
+  CORS_ORIGINS: z.string().optional(),
+  /**
+   * Secure-флаг cookie refresh-токена.
+   * auto = true в production (HTTPS). На HTTP по IP поставьте false.
+   */
+  COOKIE_SECURE: z.enum(['true', 'false', 'auto']).default('auto'),
 
   S3_ENDPOINT: z.string().optional(),
   S3_REGION: z.string().default('us-east-1'),
@@ -40,7 +47,7 @@ const envSchema = z.object({
   S3_PUBLIC_URL: z.string().optional(),
 
   EMAIL_PROVIDER: z.enum(['smtp', 'sendgrid', 'mailgun', 'console']).default('console'),
-  EMAIL_FROM: z.string().default('TiSei CRM <no-reply@tisei.kz>'),
+  EMAIL_FROM: z.string().default('Береке ТехСервис CRM <no-reply@tisei.kz>'),
   SMTP_HOST: z.string().optional(),
   SMTP_PORT: z.coerce.number().optional(),
   SMTP_USER: z.string().optional(),
@@ -56,6 +63,15 @@ const envSchema = z.object({
   WEB_PUSH_VAPID_PUBLIC_KEY: z.string().optional(),
   WEB_PUSH_VAPID_PRIVATE_KEY: z.string().optional(),
   WEB_PUSH_SUBJECT: z.string().default('mailto:admin@tisei.kz'),
+
+  /** Firebase Cloud Messaging (native push). Optional — without these, inbox still works. */
+  FIREBASE_PROJECT_ID: z.string().optional(),
+  FIREBASE_CLIENT_EMAIL: z.string().optional(),
+  FIREBASE_PRIVATE_KEY: z.string().optional(),
+  /** Alternative: full service-account JSON as a single string */
+  FIREBASE_SERVICE_ACCOUNT_JSON: z.string().optional(),
+  /** Preferred: absolute/relative path to downloaded Firebase service account JSON */
+  FIREBASE_SERVICE_ACCOUNT_PATH: z.string().optional(),
 
   GEO_PROVIDER: z.enum(['twogis', 'yandex']).default('twogis'),
   TWOGIS_API_KEY: z.string().optional(),
@@ -88,3 +104,13 @@ export type Env = typeof env;
 
 export const isProd = env.NODE_ENV === 'production';
 export const isTest = env.NODE_ENV === 'test';
+export const isCookieSecure =
+  env.COOKIE_SECURE === 'true' || (env.COOKIE_SECURE === 'auto' && isProd);
+
+export function corsOrigins(): string[] {
+  const extra = (env.CORS_ORIGINS ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean);
+  return [...new Set([env.FRONTEND_CRM_URL, env.FRONTEND_LANDING_URL, ...extra])];
+}

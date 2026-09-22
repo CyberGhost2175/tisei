@@ -50,5 +50,7 @@ export function archiveUser(id: string) {
 }
 
 export function fetchExecutors() {
-  return apiFetch<Array<{ id: string; fullName: string; email: string }>>("/users/executors");
+  return apiFetch<Array<{ id: string; fullName: string; email: string; role?: UserRole }>>(
+    "/users/executors",
+  );
 }

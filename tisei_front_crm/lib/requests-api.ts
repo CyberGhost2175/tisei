@@ -6,6 +6,7 @@ import type {
   Comment,
   CreateRequestPayload,
   DashboardKpi,
+  MapOverview,
   OptimizedRoute,
   Paginated,
   ServiceRequest,
@@ -55,6 +56,14 @@ export function assignExecutors(requestId: string, executorIds: string[]) {
 
 export function claimRequest(requestId: string) {
   return apiFetch<ServiceRequest>(`/requests/${requestId}/claim`, { method: "POST" });
+}
+
+export function acceptRequestOffer(requestId: string) {
+  return apiFetch<ServiceRequest>(`/requests/${requestId}/accept`, { method: "POST" });
+}
+
+export function declineRequest(requestId: string) {
+  return apiFetch<ServiceRequest>(`/requests/${requestId}/decline`, { method: "POST" });
 }
 
 export function fetchDashboard(dateFrom?: string, dateTo?: string) {
@@ -135,6 +144,15 @@ export function fetchExecutorKpiDetail(executorId: string, period: ExecutorKpiPe
   return apiFetch<ExecutorKpiDetail>(`/analytics/executor-kpi/${executorId}?${qs}`);
 }
 
+export function fetchMapOverview(params: Record<string, string | boolean | undefined> = {}) {
+  const qs = new URLSearchParams();
+  for (const [k, v] of Object.entries(params)) {
+    if (v !== undefined && v !== "") qs.set(k, String(v));
+  }
+  const q = qs.toString();
+  return apiFetch<MapOverview>(`/routing/map${q ? `?${q}` : ""}`);
+}
+
 export function fetchTodayRoute(executorId?: string) {
   const qs = new URLSearchParams();
   if (executorId) qs.set("executorId", executorId);
@@ -172,10 +190,28 @@ export function confirmClosingForm(
   });
 }
 
+export function createActShare(requestId: string) {
+  return apiFetch<{ url: string; pdfUrl: string; token: string }>(
+    `/requests/${requestId}/act-share`,
+    { method: "POST" },
+  );
+}
+
 export function createRequest(body: CreateRequestPayload) {
   return apiFetch<ServiceRequest>("/requests", {
     method: "POST",
     body: JSON.stringify(body),
+  });
+}
+
+export function deleteRequest(id: string) {
+  return apiFetch<{ message: string }>(`/requests/${id}`, { method: "DELETE" });
+}
+
+export function bulkDeleteRequests(ids: string[]) {
+  return apiFetch<{ message: string; deleted: number }>("/requests/bulk-delete", {
+    method: "POST",
+    body: JSON.stringify({ ids }),
   });
 }
 

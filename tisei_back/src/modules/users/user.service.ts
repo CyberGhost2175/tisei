@@ -88,7 +88,7 @@ export async function createUser(body: CreateUserBody, actorId: string) {
   if (!body.password) {
     await getEmailProvider().send({
       to: user.email,
-      subject: 'Добро пожаловать в TiSei CRM',
+      subject: 'Добро пожаловать в Береке ТехСервис CRM',
       html: `<p>Ваш аккаунт создан. Временный пароль: <strong>${password}</strong></p><p>Войдите: ${env.FRONTEND_CRM_URL}/login</p>`,
       text: `Временный пароль: ${password}`,
     });
@@ -240,7 +240,7 @@ export async function adminResetPassword(
   if (options.sendEmail !== false) {
     await getEmailProvider().send({
       to: user.email,
-      subject: 'Новый пароль TiSei CRM',
+      subject: 'Новый пароль Береке ТехСервис CRM',
       html: `<p>Администратор сбросил ваш пароль. Новый пароль: <strong>${password}</strong></p>`,
       text: `Новый пароль: ${password}`,
     });
@@ -256,11 +256,16 @@ export async function adminResetPassword(
   return { message: 'Пароль сброшен', temporaryPassword: options.sendEmail === false ? password : undefined };
 }
 
-const executorSelect = { id: true, fullName: true, email: true } satisfies Prisma.UserSelect;
+const executorSelect = {
+  id: true,
+  fullName: true,
+  email: true,
+  role: true,
+} satisfies Prisma.UserSelect;
 
 export async function listExecutors() {
   const users = await prisma.user.findMany({
-    where: { role: 'executor', isActive: true },
+    where: { role: { in: ['executor', 'master'] }, isActive: true },
     select: executorSelect,
     orderBy: { fullName: 'asc' },
   });

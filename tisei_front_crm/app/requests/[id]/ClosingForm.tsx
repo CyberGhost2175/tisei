@@ -1,10 +1,11 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { MSym } from "../../components/symbols";
 import { AlertModal, ConfirmModal } from "../../components/Modal";
 import { confirmClosingForm, fetchClosingForm, saveClosingForm } from "@/lib/requests-api";
+import { fetchRequestPartUsages } from "@/lib/parts-api";
 import type { ClosingFormData } from "@/lib/types";
 import { ApiError } from "@/lib/api";
 
@@ -26,14 +27,20 @@ function validateForm(input: {
 export function ClosingForm({
   requestId,
   onClosed,
+  reloadKey = 0,
+  /** Доля в кассу: 0.1 штатный, 0.2 партнёрский мастер */
+  companyCommissionRate = 0.1,
 }: {
   requestId: string;
   onClosed?: () => void;
+  reloadKey?: number;
+  companyCommissionRate?: number;
 }) {
   const router = useRouter();
   const [form, setForm] = useState<ClosingFormData | null>(null);
   const [income, setIncome] = useState(0);
   const [expense, setExpense] = useState(0);
+  const [partsExpense, setPartsExpense] = useState(0);
   const [workPerformed, setWorkPerformed] = useState("");
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -43,37 +50,56 @@ export function ClosingForm({
   const [showSuccess, setShowSuccess] = useState(false);
   const [alert, setAlert] = useState<{ title: string; description: string } | null>(null);
 
-  useEffect(() => {
-    async function load() {
-      setLoading(true);
-      setError("");
-      try {
-        const data = await fetchClosingForm(requestId);
-        setForm(data);
-        setIncome(data.incomeAmount);
-        setExpense(data.expenseAmount);
-        setWorkPerformed(data.workPerformed ?? "");
-      } catch (e) {
-        if (e instanceof ApiError && e.status === 404) {
-          setForm(null);
-        } else {
-          setError(e instanceof ApiError ? e.message : "Ошибка загрузки анкеты");
+  const cashRate =
+    form?.companyCommissionRate ?? companyCommissionRate;
+  const masterRate = form?.executorPayoutRate ?? 1 - cashRate;
+  const cashPct = Math.round(cashRate * 100);
+  const masterPct = Math.round(masterRate * 100);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    setError("");
+    try {
+      const data = await fetchClosingForm(requestId);
+      setForm(data);
+      setIncome(data.incomeAmount);
+      setExpense(data.expenseAmount);
+      setPartsExpense(data.partsExpenseAmount);
+      setWorkPerformed(data.workPerformed ?? "");
+    } catch (e) {
+      if (e instanceof ApiError && e.status === 404) {
+        setForm(null);
+        try {
+          const usages = await fetchRequestPartUsages(requestId);
+          const partsTotal = usages.reduce((sum, u) => sum + u.lineTotal, 0);
+          setPartsExpense(partsTotal);
+          setExpense(partsTotal);
+          setIncome(0);
+          setWorkPerformed("");
+        } catch {
+          setPartsExpense(0);
+          setExpense(0);
         }
-      } finally {
-        setLoading(false);
+      } else {
+        setError(e instanceof ApiError ? e.message : "Ошибка загрузки анкеты");
       }
+    } finally {
+      setLoading(false);
     }
-    void load();
   }, [requestId]);
+
+  useEffect(() => {
+    void load();
+  }, [load, reloadKey]);
 
   const calculated = useMemo(() => {
     const profit = income - expense;
     return {
       profit,
-      executorPayout: profit * 0.9,
-      companyCommission: profit * 0.1,
+      executorPayout: profit * masterRate,
+      companyCommission: profit * cashRate,
     };
-  }, [income, expense]);
+  }, [income, expense, masterRate, cashRate]);
 
   const isFormComplete = useMemo(
     () => !validateForm({ income, expense, workPerformed }),
@@ -93,6 +119,7 @@ export function ClosingForm({
       setForm(saved);
       setIncome(saved.incomeAmount);
       setExpense(saved.expenseAmount);
+      setPartsExpense(saved.partsExpenseAmount);
       setWorkPerformed(saved.workPerformed ?? "");
     } catch (e) {
       setError(e instanceof ApiError ? e.message : "Ошибка сохранения");
@@ -151,15 +178,24 @@ export function ClosingForm({
 
   const locked = form?.isLocked ?? false;
 
+  const stats = locked && form
+    ? {
+        profit: form.profit,
+        executorPayout: form.executorPayout,
+        companyCommission: form.companyCommission,
+      }
+    : calculated;
+
   const confirmDescription = (
     <div className="space-y-3 text-left">
       <p>Вы уверены, что хотите закрыть заявку? После закрытия финансовые данные изменить будет нельзя.</p>
       <div className="rounded-lg bg-surface-container-low p-3 text-body-sm space-y-1 font-mono-data">
         <p>Приход: {fmt(income)}</p>
         <p>Расход: {fmt(expense)}</p>
+        {partsExpense > 0 && <p className="text-on-surface-variant">В т.ч. запчасти: {fmt(partsExpense)}</p>}
         <p className="font-bold text-primary">Прибыль: {fmt(calculated.profit)}</p>
-        <p>Мастеру (90%): {fmt(calculated.executorPayout)}</p>
-        <p>В кассу (10%): {fmt(calculated.companyCommission)}</p>
+        <p>Мастеру ({masterPct}%): {fmt(calculated.executorPayout)}</p>
+        <p>В кассу ({cashPct}%): {fmt(calculated.companyCommission)}</p>
       </div>
     </div>
   );
@@ -208,6 +244,11 @@ export function ClosingForm({
               disabled={locked || saving}
               onChange={(e) => setExpense(Number(e.target.value) || 0)}
             />
+            {partsExpense > 0 && (
+              <p className="text-[11px] text-on-surface-variant">
+                В т.ч. запчасти со склада: <span className="font-mono-data">{fmt(partsExpense)}</span>
+              </p>
+            )}
           </div>
         </div>
         <div className="space-y-2 mb-6">
@@ -222,9 +263,9 @@ export function ClosingForm({
           />
         </div>
         <div className="grid grid-cols-1 sm:grid-cols-3 gap-gutter mb-6">
-          <StatCard label="Прибыль" value={fmt(form?.profit ?? calculated.profit)} />
-          <StatCard label="Мастеру (90%)" value={fmt(form?.executorPayout ?? calculated.executorPayout)} accent />
-          <StatCard label="В кассу (10%)" value={fmt(form?.companyCommission ?? calculated.companyCommission)} />
+          <StatCard label="Прибыль" value={fmt(stats.profit)} />
+          <StatCard label={`Мастеру (${masterPct}%)`} value={fmt(stats.executorPayout)} accent />
+          <StatCard label={`В кассу (${cashPct}%)`} value={fmt(stats.companyCommission)} />
         </div>
         <div className="flex gap-3">
           <button

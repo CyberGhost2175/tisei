@@ -7,6 +7,8 @@ import {
   notificationIdParamSchema,
   updatePreferencesBodySchema,
   markReadBodySchema,
+  registerDeviceTokenBodySchema,
+  unregisterDeviceTokenBodySchema,
 } from './notification.schemas.js';
 import {
   listNotifications,
@@ -16,6 +18,11 @@ import {
   markSingleRead,
   getUnreadCount,
 } from './notification.service.js';
+import {
+  registerDeviceToken,
+  unregisterDeviceToken,
+  listDeviceTokens,
+} from './device-token.service.js';
 
 const notificationResponseSchema = z.object({
   id: z.string(),
@@ -25,6 +32,15 @@ const notificationResponseSchema = z.object({
   isRead: z.boolean(),
   sentAt: z.string().nullable(),
   createdAt: z.string(),
+});
+
+const deviceTokenResponseSchema = z.object({
+  id: z.string(),
+  token: z.string(),
+  platform: z.enum(['ios', 'android', 'web']),
+  deviceId: z.string().nullable(),
+  createdAt: z.string(),
+  updatedAt: z.string(),
 });
 
 export async function notificationsRoutes(app: FastifyInstance): Promise<void> {
@@ -138,6 +154,53 @@ export async function notificationsRoutes(app: FastifyInstance): Promise<void> {
         request.body.preferences,
       ),
     }),
+  );
+
+  r.get(
+    '/device-tokens',
+    {
+      preHandler: [authenticate],
+      schema: {
+        tags: ['Notifications'],
+        summary: 'Список FCM device tokens текущего пользователя',
+        security: [{ bearerAuth: [] }],
+        response: {
+          200: z.object({ items: z.array(deviceTokenResponseSchema) }),
+        },
+      },
+    },
+    async (request) => listDeviceTokens(request.authUser!.id),
+  );
+
+  r.post(
+    '/device-tokens',
+    {
+      preHandler: [authenticate],
+      schema: {
+        tags: ['Notifications'],
+        summary: 'Зарегистрировать FCM device token (mobile / web)',
+        security: [{ bearerAuth: [] }],
+        body: registerDeviceTokenBodySchema,
+        response: { 200: deviceTokenResponseSchema },
+      },
+    },
+    async (request) => registerDeviceToken(request.authUser!.id, request.body),
+  );
+
+  r.delete(
+    '/device-tokens',
+    {
+      preHandler: [authenticate],
+      schema: {
+        tags: ['Notifications'],
+        summary: 'Удалить FCM device token (logout / отписка)',
+        security: [{ bearerAuth: [] }],
+        body: unregisterDeviceTokenBodySchema,
+        response: { 200: z.object({ deleted: z.number() }) },
+      },
+    },
+    async (request) =>
+      unregisterDeviceToken(request.authUser!.id, request.body.token),
   );
 
   r.patch(

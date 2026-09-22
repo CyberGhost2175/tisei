@@ -4,6 +4,7 @@ import { verifyAccessToken } from '../utils/jwt.js';
 
 /**
  * Auth guard: verifies the Bearer access token and attaches `request.authUser`.
+ * Also accepts `access_token` / `token` query (for opening PDFs in the browser).
  * Attach as a route `preHandler`. Does NOT check role — use requireRole for that.
  */
 export async function authenticate(
@@ -11,11 +12,18 @@ export async function authenticate(
   _reply: FastifyReply,
 ): Promise<void> {
   const header = request.headers.authorization;
-  if (!header || !header.startsWith('Bearer ')) {
+  let token: string | undefined;
+  if (header?.startsWith('Bearer ')) {
+    token = header.slice('Bearer '.length).trim();
+  } else {
+    const q = request.query as { access_token?: string; token?: string };
+    token = (q.access_token ?? q.token)?.trim();
+  }
+
+  if (!token) {
     throw new UnauthorizedError('Отсутствует токен доступа');
   }
 
-  const token = header.slice('Bearer '.length).trim();
   try {
     const payload = verifyAccessToken(token);
     request.authUser = {

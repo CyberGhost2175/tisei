@@ -11,7 +11,7 @@ function LoginForm() {
   const { setUser } = useAuth();
 
   const [email, setEmail] = useState("manager@tisei.kz");
-  const [password, setPassword] = useState("Admin123!");
+  const [password, setPassword] = useState("");
   const [code, setCode] = useState("");
   const [pendingToken, setPendingToken] = useState<string | null>(null);
   const [error, setError] = useState("");
@@ -60,8 +60,13 @@ function LoginForm() {
     <div className="min-h-screen bg-background flex items-center justify-center p-6">
       <div className="w-full max-w-md bg-surface-container-lowest border border-outline-variant rounded-2xl p-8 shadow-lg">
         <div className="mb-8 text-center">
-          <h1 className="font-headline-lg text-headline-lg text-primary">TiSei CRM</h1>
-          <p className="text-on-surface-variant text-body-sm mt-2">Вход в систему управления заявками</p>
+          <img
+            src="/bereke-mark.png"
+            alt="Береке ТехСервис"
+            className="w-16 h-16 rounded-2xl mx-auto mb-4 object-cover shadow-md"
+          />
+          <h1 className="font-headline-lg text-headline-lg text-primary">Береке ТехСервис</h1>
+          <p className="text-on-surface-variant text-body-sm mt-2">CRM · вход в систему управления заявками</p>
         </div>
 
         {!pendingToken ? (
@@ -119,9 +124,7 @@ function LoginForm() {
           </form>
         )}
 
-        <p className="text-[11px] text-on-surface-variant mt-6 text-center">
-          Демо: manager@tisei.kz / Admin123!
-        </p>
+       
       </div>
     </div>
   );

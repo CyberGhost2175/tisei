@@ -8,6 +8,19 @@ describe('calculateClosing', () => {
     expect(result.profit.toNumber()).toBe(60_000);
     expect(result.companyCommission.toNumber()).toBe(6_000);
     expect(result.executorPayout.toNumber()).toBe(54_000);
+    expect(result.companyCommissionRate).toBe(0.1);
+  });
+
+  it('calculates profit and splits 20/80 for partner master', () => {
+    const result = calculateClosing({
+      incomeAmount: 100_000,
+      expenseAmount: 40_000,
+      executorRole: 'master',
+    });
+    expect(result.profit.toNumber()).toBe(60_000);
+    expect(result.companyCommission.toNumber()).toBe(12_000);
+    expect(result.executorPayout.toNumber()).toBe(48_000);
+    expect(result.companyCommissionRate).toBe(0.2);
   });
 
   it('handles zero income and expense', () => {

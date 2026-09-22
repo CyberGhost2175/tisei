@@ -29,6 +29,21 @@ export const passwordResetConfirmSchema = z.object({
   newPassword: z.string().min(8, 'Пароль должен содержать минимум 8 символов'),
 });
 
+export const changePasswordBodySchema = z
+  .object({
+    currentPassword: z.string().min(1, 'Укажите текущий пароль'),
+    newPassword: z.string().min(8, 'Новый пароль должен содержать минимум 8 символов'),
+    confirmPassword: z.string().min(8, 'Подтвердите новый пароль'),
+  })
+  .refine((data) => data.newPassword === data.confirmPassword, {
+    message: 'Пароли не совпадают',
+    path: ['confirmPassword'],
+  })
+  .refine((data) => data.currentPassword !== data.newPassword, {
+    message: 'Новый пароль должен отличаться от текущего',
+    path: ['newPassword'],
+  });
+
 export const authTokensResponseSchema = z.object({
   accessToken: z.string(),
   expiresIn: z.string(),
@@ -36,7 +51,7 @@ export const authTokensResponseSchema = z.object({
     id: z.string(),
     email: z.string(),
     fullName: z.string(),
-    role: z.enum(['manager', 'executor', 'admin']),
+    role: z.enum(['manager', 'executor', 'master', 'admin']),
     is2faEnabled: z.boolean(),
   }),
 });
@@ -51,7 +66,7 @@ export const loginResponseSchema = z.object({
       id: z.string(),
       email: z.string(),
       fullName: z.string(),
-      role: z.enum(['manager', 'executor', 'admin']),
+      role: z.enum(['manager', 'executor', 'master', 'admin']),
       is2faEnabled: z.boolean(),
     })
     .optional(),

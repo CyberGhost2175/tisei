@@ -20,6 +20,11 @@ trap shutdown TERM INT
 echo "[entrypoint] Applying database migrations..."
 npx prisma migrate deploy
 
+if [ -n "${BOOTSTRAP_ADMIN_PASSWORD:-}" ]; then
+  echo "[entrypoint] Bootstrap admin..."
+  node scripts/bootstrap-admin.mjs || true
+fi
+
 echo "[entrypoint] Starting background worker..."
 node dist/jobs/worker.js &
 WORKER_PID=$!

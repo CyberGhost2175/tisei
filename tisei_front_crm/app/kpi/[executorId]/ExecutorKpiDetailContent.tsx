@@ -48,7 +48,7 @@ export function ExecutorKpiDetailContent({ executorId }: { executorId: string })
   const [tab, setTab] = useState<"closed" | "claimed">("closed");
 
   useEffect(() => {
-    if (user?.role === "executor") router.replace("/");
+    if (user?.role === "executor" || user?.role === "master") router.replace("/");
   }, [user, router]);
 
   const load = useCallback(async () => {

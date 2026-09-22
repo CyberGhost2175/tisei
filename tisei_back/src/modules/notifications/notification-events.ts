@@ -15,7 +15,7 @@ export type NotificationEventType = (typeof NOTIFICATION_EVENT_TYPES)[number];
 
 export const NOTIFICATION_EVENT_LABELS: Record<NotificationEventType, string> = {
   'request.created': 'Новая заявка',
-  'request.assigned': 'Назначение на заявку',
+  'request.assigned': 'Назначение / предложение заявки',
   'request.status_changed': 'Изменение статуса',
   'request.deadline_reminder': 'Напоминание за 24ч до дедлайна',
   'request.overdue': 'Просроченная заявка',

@@ -18,6 +18,17 @@ export const updateServiceEquipmentBodySchema = createServiceEquipmentBodySchema
   status: serviceEquipmentStatusSchema.optional(),
 });
 
+export const serviceEquipmentAttachmentSchema = z.object({
+  id: z.string(),
+  serviceEquipmentId: z.string(),
+  uploadedById: z.string().nullable(),
+  url: z.string(),
+  fileName: z.string().nullable(),
+  fileType: z.string().nullable(),
+  sizeBytes: z.number().nullable(),
+  createdAt: z.string(),
+});
+
 export const serviceEquipmentIdParamSchema = z.object({ id: cuidSchema });
 
 export const serviceEquipmentResponseSchema = z.object({
@@ -39,6 +50,7 @@ export const serviceEquipmentResponseSchema = z.object({
   receivedAt: z.string(),
   returnedAt: z.string().nullable(),
   notes: z.string().nullable(),
+  attachments: z.array(serviceEquipmentAttachmentSchema).optional(),
   createdAt: z.string(),
   updatedAt: z.string(),
 });

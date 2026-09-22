@@ -58,7 +58,7 @@ export async function exportRequestPdf(requestId: string, auth: AuthContext): Pr
   if (!request) throw new NotFoundError('Заявка не найдена');
 
   const lines = [
-    'TiSei CRM - Eksport zayavki',
+    'Береке ТехСервис CRM - Eksport zayavki',
     `Nomer: ${request.number}`,
     `Status: ${request.status}`,
     `Prioritet: ${request.priority}`,

@@ -1,5 +1,12 @@
 # TiSei — Production Deployment (Docker)
 
+Есть два сценария:
+
+- **Без домена, только визитка + API** (ваш текущий VPS) — см. [docs/HOSTING.md](docs/HOSTING.md) и `docker-compose.hosting.yml`.
+- **С доменами, SSL и CRM-фронтом** — этот файл и `docker-compose.prod.yml`.
+
+---
+
 Развёртывание на **Ubuntu 24.04 VPS** с **Docker Compose**, **Nginx Proxy Manager** (SSL / Let's Encrypt) и **AWS S3**.
 
 ## Архитектура

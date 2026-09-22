@@ -8,11 +8,13 @@ export const requestStatusSchema = z.enum([
   'awaiting_parts',
   'frozen',
   'in_service',
+  'awaiting_approval',
+  'repeat',
   'closed',
   'cancelled',
 ]);
 
-export const requestPrioritySchema = z.enum(['critical', 'high', 'normal', 'low']);
+export const requestPrioritySchema = z.enum(['P1', 'P2', 'P3', 'P4']);
 
 export const createRequestBodySchema = z.object({
   companyOrFullName: z.string().min(1).max(255),
@@ -25,7 +27,7 @@ export const createRequestBodySchema = z.object({
   problemDescription: z.string().max(5000).optional(),
   malfunctionTypeId: cuidSchema.optional(),
   malfunctionCustomText: z.string().max(1000).optional(),
-  priority: requestPrioritySchema.default('normal'),
+  priority: requestPrioritySchema.nullable().optional(),
   partnerEstablishmentId: cuidSchema.nullable().optional(),
   deadline: z.coerce.date().optional(),
   clientType: z.enum(['serviced', 'new_from_site']).optional(),
@@ -42,6 +44,8 @@ export const requestListQuerySchema = paginationSchema.extend({
   status: requestStatusSchema.optional(),
   priority: requestPrioritySchema.optional(),
   clientType: z.enum(['serviced', 'new_from_site']).optional(),
+  /** По умолчанию только repair; maintenance — отдельный раздел */
+  kind: z.enum(['repair', 'maintenance', 'all']).default('repair'),
   executorId: cuidSchema.optional(),
   search: z.string().max(100).optional(),
   deadlineFrom: z.coerce.date().optional(),
@@ -73,6 +77,16 @@ export const freezeRequestBodySchema = z.object({
 
 export const requestIdParamSchema = z.object({ id: cuidSchema });
 
+export const bulkDeleteRequestsBodySchema = z.object({
+  ids: z.array(cuidSchema).min(1).max(100),
+});
+
+export const bulkDeleteRequestsResponseSchema = z.object({
+  message: z.string(),
+  deleted: z.number().int(),
+});
+
 export type CreateRequestBody = z.infer<typeof createRequestBodySchema>;
 export type UpdateRequestBody = z.infer<typeof updateRequestBodySchema>;
 export type RequestListQuery = z.infer<typeof requestListQuerySchema>;
+export type BulkDeleteRequestsBody = z.infer<typeof bulkDeleteRequestsBodySchema>;

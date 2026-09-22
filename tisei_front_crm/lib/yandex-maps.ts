@@ -67,6 +67,7 @@ export interface YMapsNamespace {
 }
 
 export interface YGeoObject {
+  balloon?: { open: () => void; close?: () => void };
   events: { add: (event: string, cb: () => void) => void };
 }
 

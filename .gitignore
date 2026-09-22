@@ -30,6 +30,6 @@ backups/
 # Prisma local
 prisma/*.db
 
-# Misc
-.vercel
+# Secrets
 *.pem
+tisei_back/secrets/

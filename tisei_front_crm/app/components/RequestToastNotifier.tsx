@@ -30,7 +30,7 @@ function parsePayload(notification: AppNotification): NewRequestPayload | null {
     number: data.number,
     companyOrFullName: data.companyOrFullName ?? "Новая заявка",
     address: data.address ?? null,
-    priority: data.priority ?? "normal",
+    priority: data.priority ?? "P3",
     isPartner: data.isPartner,
   };
 }
@@ -45,7 +45,7 @@ function RequestToast({
   const { payload, notification } = item;
   const priority = (payload.priority in PRIORITY_LABELS
     ? payload.priority
-    : "normal") as RequestPriority;
+    : "P3") as RequestPriority;
 
   useEffect(() => {
     const t = setTimeout(() => {
@@ -70,7 +70,7 @@ function RequestToast({
         <div
           className={
             payload.isPartner
-              ? "w-11 h-11 rounded-xl bg-[#e65100]/15 text-[#e65100] flex items-center justify-center shrink-0"
+              ? "w-11 h-11 rounded-xl bg-sky-100 text-sky-700 flex items-center justify-center shrink-0"
               : "w-11 h-11 rounded-xl bg-primary-container/25 text-primary flex items-center justify-center shrink-0"
           }
         >
@@ -110,7 +110,7 @@ function RequestToast({
               {PRIORITY_LABELS[priority]}
             </span>
             {payload.isPartner && (
-              <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-[#e65100]/15 text-[#e65100]">
+              <span className="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full bg-sky-100 text-sky-700">
                 Партнёр
               </span>
             )}

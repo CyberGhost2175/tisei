@@ -20,6 +20,8 @@ export function DashboardContent() {
   useRequireAuth();
   const { user } = useAuth();
   const isExecutor = user?.role === "executor";
+  const isMaster = user?.role === "master";
+  const isField = isExecutor || isMaster;
   const { debouncedQuery } = useGlobalSearch();
   const [kpi, setKpi] = useState<DashboardKpi["kpi"] | null>(null);
   const [requests, setRequests] = useState<ServiceRequest[]>([]);
@@ -37,7 +39,7 @@ export function DashboardContent() {
         sortOrder: "desc",
         active: true,
       };
-      if (isExecutor) listParams.mine = true;
+      if (isField) listParams.mine = true;
       if (debouncedQuery) listParams.search = debouncedQuery;
 
       const availableParams: Record<string, string | number | boolean> = {
@@ -85,7 +87,7 @@ export function DashboardContent() {
     } catch (e) {
       if (!silent) setError(e instanceof ApiError ? e.message : "Ошибка загрузки");
     }
-  }, [isExecutor, debouncedQuery]);
+  }, [isExecutor, isField, debouncedQuery]);
 
   useEffect(() => {
     void load();
@@ -114,11 +116,13 @@ export function DashboardContent() {
 
       <div className="grid grid-cols-12 gap-gutter max-w-[1600px] mx-auto">
         <section className="col-span-12 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-gutter mb-stack-lg">
-          {isExecutor ? (
+          {isField ? (
             <>
               <KpiCard title="Мои активные" value={kpi?.totalRequests ?? "—"} icon="assignment" />
               <KpiCard title="Сегодня новых" value={kpi?.todayRequests ?? 0} icon="today" />
-              <KpiCard title="Свободные" value={availableRequests.length} icon="fiber_new" />
+              {isExecutor && (
+                <KpiCard title="Свободные" value={availableRequests.length} icon="fiber_new" />
+              )}
               <KpiCard title="В работе" value={kpi?.inProgress ?? 0} icon="engineering" />
               <KpiCard title="Закрыто сегодня" value={kpi?.closedRequests ?? 0} icon="task_alt" />
               <KpiCard title="Партнёры в очереди" value={kpi?.partnerActive ?? 0} icon="store" />
@@ -156,13 +160,13 @@ export function DashboardContent() {
 
         <div className="col-span-12 lg:col-span-8">
           <RequestTable
-            title={isExecutor ? "Мои текущие заявки" : "Последние заявки"}
+            title={isField ? "Мои текущие заявки" : "Последние заявки"}
             requests={requests}
             highlightIds={highlightIds}
           />
         </div>
 
-        {isExecutor && (
+        {isField && (
           <div className="col-span-12 lg:col-span-4">
             <div className="bg-primary-container/10 border border-primary-container/30 rounded-xl p-gutter">
               <h3 className="font-headline-sm text-headline-sm mb-3">Быстрые действия</h3>
@@ -170,12 +174,14 @@ export function DashboardContent() {
                 <Link href="/map" className="px-4 py-3 bg-primary text-on-primary rounded-lg text-center font-label-md">
                   Маршрут на сегодня
                 </Link>
+                {isExecutor && (
                 <Link
                   href="/requests?available=true"
                   className="px-4 py-3 border border-outline-variant rounded-lg text-center font-label-md"
                 >
                   Свободные заявки
                 </Link>
+                )}
                 <Link
                   href="/settings"
                   className="px-4 py-3 border border-outline-variant rounded-lg text-center font-label-md"
@@ -225,13 +231,21 @@ function RequestTable({
             {requests.map((r) => (
               <tr
                 key={r.id}
-                className={`hover:bg-surface-container-lowest ${highlightIds.has(r.id) ? "row-new-highlight" : ""}`}
+                className={[
+                  r.partnerEstablishmentId ? "bg-sky-100/80 hover:bg-sky-100" : "hover:bg-surface-container-lowest",
+                  highlightIds.has(r.id) ? "row-new-highlight" : "",
+                ].join(" ")}
               >
                 <td className="px-4 py-3">
                   <div className="flex items-center gap-2">
                     <Link href={`/requests/${r.id}`} className="font-mono-data font-bold hover:text-primary">
                       {r.number}
                     </Link>
+                    {r.partnerEstablishmentId && (
+                      <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-sky-200 text-sky-800">
+                        партнёр
+                      </span>
+                    )}
                     {(highlightIds.has(r.id) || isRecent(r.createdAt)) && (
                       <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded bg-primary-container/20 text-primary">
                         new
@@ -240,7 +254,9 @@ function RequestTable({
                   </div>
                 </td>
                 <td className="px-4 py-3 text-body-sm">{STATUS_LABELS[r.status]}</td>
-                <td className="px-4 py-3 text-body-sm">{PRIORITY_LABELS[r.priority]}</td>
+                <td className="px-4 py-3 text-body-sm">
+                  {r.priority ? PRIORITY_LABELS[r.priority] : "—"}
+                </td>
                 <td className="px-4 py-3">{r.companyOrFullName}</td>
                 <td className="px-4 py-3 text-body-sm">{r.source === "site" ? "Сайт" : "CRM"}</td>
                 <td className="px-4 py-3 text-body-sm">{formatDate(r.createdAt)}</td>

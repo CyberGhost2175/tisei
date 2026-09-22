@@ -96,6 +96,7 @@ Handles geocoding, overdue checks and deadline reminders.
 ### Notifications
 - `GET /notifications`, `/unread-count`, `POST /mark-read`, `PATCH /:id/read`
 - `GET/PATCH /notifications/preferences`
+- `GET/POST/DELETE /notifications/device-tokens` — FCM device token registration (mobile)
 
 ### Routing
 - `GET /routing/today?executorId=`, `POST /routing/optimize`
@@ -165,7 +166,8 @@ The bucket (or CloudFront) must allow **public read** for attachment URLs to ope
 For local dev without AWS, use MinIO from `docker compose` and the commented block in `.env.example`.
 | `TWOGIS_API_KEY` | Geocoding provider |
 | `RECAPTCHA_SECRET` | Public form protection |
-| `WEB_PUSH_VAPID_*` | Web Push notifications |
+| `WEB_PUSH_VAPID_*` | Web Push notifications (browser) |
+| `FIREBASE_PROJECT_ID` / `FIREBASE_CLIENT_EMAIL` / `FIREBASE_PRIVATE_KEY` | FCM native push (or `FIREBASE_SERVICE_ACCOUNT_JSON`) |
 
 ## Database backup
 

@@ -17,6 +17,13 @@ import {
   listServiceEquipment,
   updateServiceEquipment,
 } from './service-equipment.service.js';
+import {
+  deleteServiceEquipmentAttachment,
+  listServiceEquipmentAttachments,
+  uploadServiceEquipmentAttachment,
+} from './service-equipment-attachment.service.js';
+import { BadRequestError } from '../../common/errors/AppError.js';
+import { serviceEquipmentAttachmentSchema } from './service-equipment.schemas.js';
 
 export async function serviceEquipmentRoutes(app: FastifyInstance): Promise<void> {
   const r = app.withTypeProvider<ZodTypeProvider>();
@@ -65,6 +72,66 @@ export async function serviceEquipmentRoutes(app: FastifyInstance): Promise<void
       },
     },
     async (request) => updateServiceEquipment(request.params.id, request.body),
+  );
+
+  r.get(
+    '/:id/attachments',
+    {
+      preHandler: [authenticate],
+      schema: {
+        tags: ['ServiceEquipment'],
+        summary: 'Фото оборудования в сервисе',
+        params: serviceEquipmentIdParamSchema,
+        response: { 200: z.array(serviceEquipmentAttachmentSchema) },
+      },
+    },
+    async (request) => listServiceEquipmentAttachments(request.params.id),
+  );
+
+  r.post(
+    '/:id/attachments',
+    {
+      preHandler: [authenticate, requireRole(['manager', 'admin'])],
+      schema: {
+        tags: ['ServiceEquipment'],
+        summary: 'Загрузить фото оборудования',
+        params: serviceEquipmentIdParamSchema,
+        consumes: ['multipart/form-data'],
+        response: { 201: serviceEquipmentAttachmentSchema },
+      },
+    },
+    async (request, reply) => {
+      const data = await request.file();
+      if (!data) throw new BadRequestError('Файл не передан');
+      const buffer = await data.toBuffer();
+      const attachment = await uploadServiceEquipmentAttachment(
+        request.params.id,
+        { buffer, filename: data.filename, mimetype: data.mimetype },
+        { userId: request.authUser!.id, role: request.authUser!.role },
+      );
+      return reply.status(201).send(attachment);
+    },
+  );
+
+  r.delete(
+    '/:id/attachments/:attachmentId',
+    {
+      preHandler: [authenticate, requireRole(['manager', 'admin'])],
+      schema: {
+        tags: ['ServiceEquipment'],
+        summary: 'Удалить фото оборудования',
+        params: z.object({ id: z.string(), attachmentId: z.string() }),
+        response: { 200: messageResponseSchema },
+      },
+    },
+    async (request) => {
+      await deleteServiceEquipmentAttachment(
+        request.params.id,
+        request.params.attachmentId,
+        { userId: request.authUser!.id, role: request.authUser!.role },
+      );
+      return { message: 'Фото удалено' };
+    },
   );
 
   r.delete(
